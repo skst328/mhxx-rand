@@ -14,9 +14,11 @@ want = mr.Charm(skill1=mr.Skill("連撃"), pts1=4,
 q = mr.Query(mr.Melding.Juju, want, kind=mr.Kind.Weathered)
 
 for f in mr.search(q, 0, 10**8, mr.Compare.AtLeast, nthreads=4):
+    print("護石:", f.charm)
     for a in f.aimpoints():
         # 錬金のフレーム、何個目か、時間
         print(a.start, a.index, a.game_time())
+    print("---")
 
 # その範囲で錬金したら何が出るか
 for o in mr.outcomes(mr.Melding.Juju, 4713, 4734):

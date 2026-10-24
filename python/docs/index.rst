@@ -8,7 +8,7 @@ MHXX の乱数と、マカ錬金のお守りの生成・検索のライブラリ
 使い方
 ------
 
-風化したお守り (マカフシギ錬金) の「連撃4 痛撃5 スロット3」を、
+風化したお守り (マカフシギ錬金) の「連撃4 痛撃5 スロット3」以上を、
 位置 0〜1 億で探し、錬金のフレームに直す。
 
 .. code-block:: python
@@ -20,13 +20,12 @@ MHXX の乱数と、マカ錬金のお守りの生成・検索のライブラリ
    # kind を省略すると、風化・古びたのどちらでも
    q = mr.Query(mr.Melding.Juju, want, kind=mr.Kind.Weathered)
 
-   for f in mr.search(q, 0, 10**8, nthreads=4):
-       f.position  # お守りを作る乱数の始まり
-       f.charm     # そのお守りの中身
-       # その位置に届く錬金のフレームと、何個目か
+   for f in mr.search(q, 0, 10**8, mr.Compare.AtLeast, nthreads=4):
+       print("護石:", f.charm)
        for a in f.aimpoints():
+           # 錬金のフレーム、何個目か、時間
            print(a.start, a.index, a.game_time())
-           # 4723 1 0d 0h 2m 37s 13f
+       print("---")
 
 狙ったフレームの前後で錬金したら何が出るかは、
 :func:`mhxx_rand.outcomes` で見る。
