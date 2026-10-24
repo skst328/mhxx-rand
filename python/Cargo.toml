@@ -1,0 +1,20 @@
+[package]
+name = "mhxx-rand-py"
+version = "0.1.0"
+description = "mhxx-rand の Python の入口 (pyo3)"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+# 本体のクレート (mhxx_rand) と名前がぶつからないように、拡張モジュールは mhxx_rand._mhxx_rand にする
+name = "_mhxx_rand"
+crate-type = ["cdylib"]
+
+[dependencies]
+mhxx-rand = { path = "../rand-core" }
+# abi3: Python 3.10 以上で共通の whl を 1 つ作る (Python の版ごとに作らない)
+pyo3 = { version = "0.30", features = ["abi3-py310"] }
+# nthreads で範囲を分けて並列に探す。本体 (mhxx-rand) は並列を知らない (wasm のアプリが取り込めるように)
+rayon = "1.12"

@@ -1,0 +1,28 @@
+[build-system]
+requires = ["maturin>=1.15,<2"]
+build-backend = "maturin"
+
+[project]
+name = "mhxx-rand"
+description = "MHXX の乱数とお守りの生成・検索 (apmnnn/mhxx-rng の非公式な Rust 移植)"
+requires-python = ">=3.10"
+license = "MIT"
+# ルートの LICENSE へのリンク
+license-files = ["LICENSE"]
+dynamic = ["version"]
+
+[tool.maturin]
+module-name = "mhxx_rand._mhxx_rand"
+python-source = "."
+# Python の API の説明 (Sphinx) は配らない
+exclude = [{ path = "docs/**/*", format = "sdist" }]
+
+[tool.uv]
+# Rust のソースが変わったら、uv sync で作り直す
+cache-keys = [
+  { file = "pyproject.toml" },
+  { file = "Cargo.toml" },
+  { file = "src/**/*.rs" },
+  { file = "../rand-core/Cargo.toml" },
+  { file = "../rand-core/src/**/*.rs" },
+]

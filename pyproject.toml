@@ -1,0 +1,29 @@
+# 開発用の環境 (uv)。ここ自体はパッケージにしない (build-system を書かないので、uv はインストールしない)。
+# 配る whl は python/ (workspace のメンバー) で、ここから手元の版を入れる
+[project]
+name = "mhxx-rand-dev"
+version = "0"
+requires-python = ">=3.13"
+dependencies = ["mhxx-rand"]
+
+[dependency-groups]
+dev = ["pytest"]
+docs = [
+    "furo>=2025.12.19",
+    "sphinx>=9.1.0",
+    "sphinx-autoapi>=3.8.1",
+]
+# reference/ (本家 mhxx-rng の切り出し) を動かす用。whl の依存には入れない
+reference = ["numpy", "numba"]
+
+[tool.uv.workspace]
+members = ["python"]
+
+[tool.uv.sources]
+mhxx-rand = { workspace = true }
+
+[tool.uv]
+default-groups = ["dev", "reference"]
+# 公開されてから 1 週間たっていない版は入れない。乗っ取られたパッケージの悪意のある版は、
+# 出てから数時間〜数日で見つかって消されることが多いので、その間に入れてしまうのを避ける
+exclude-newer = "1 week"

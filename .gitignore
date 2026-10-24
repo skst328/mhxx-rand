@@ -1,0 +1,25 @@
+# Rust のビルド成果物 (workspace の target/)
+/target/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+# maturin develop が python/mhxx_rand/ に置く拡張モジュール
+*.so
+*.pyd
+# whl と sdist
+dist/
+# Sphinx で作った HTML
+python/docs/_build/
+
+# ログ
+*.log
+
+# エディタ・OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.sw?

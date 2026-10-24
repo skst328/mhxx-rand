@@ -1,0 +1,15 @@
+[workspace]
+members = ["rand-core", "python"]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/skst328/mhxx-rand"
+
+[profile.release]
+lto = true
+
+# テストでも 10 億フレームの検索を流すので、最適化して作る
+[profile.test]
+opt-level = 3

@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mhxx-rng API リファレンス</title>
+<style>
+:root {
+  --bg: #fbfaf7; --fg: #1f2328; --muted: #5d6470; --line: #e3e0d8; --card: #ffffff;
+  --accent: #b5532a; --accent-soft: #fbeee6; --ok: #2f7d4f; --ok-soft: #e7f4ec; --warn: #9a6a00; --warn-soft: #fbf3dc;
+  --code-bg: #f2efe8;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #17191c; --fg: #e6e6e3; --muted: #a2a8b1; --line: #2e3237; --card: #1f2226;
+    --accent: #e38a5d; --accent-soft: #3a2a22; --ok: #6cc591; --ok-soft: #1f3328; --warn: #e2b54f; --warn-soft: #3a3220;
+    --code-bg: #262a2f;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #17191c; --fg: #e6e6e3; --muted: #a2a8b1; --line: #2e3237; --card: #1f2226;
+  --accent: #e38a5d; --accent-soft: #3a2a22; --ok: #6cc591; --ok-soft: #1f3328; --warn: #e2b54f; --warn-soft: #3a3220;
+  --code-bg: #262a2f;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg);
+  font: 16px/1.8 "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", system-ui, sans-serif; }
+main { max-width: 960px; margin: 0 auto; padding: 32px 16px 80px; }
+h1 { font-size: 1.7rem; line-height: 1.4; margin: 0 0 8px; }
+h2 { font-size: 1.3rem; margin: 56px 0 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+h3 { font-size: 1.05rem; margin: 28px 0 8px; }
+.lead { color: var(--muted); margin: 0 0 24px; }
+code, pre { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; }
+code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-size: .9em; }
+pre { background: var(--code-bg); padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: .88rem; line-height: 1.6; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; width: 100%; margin: 12px 0 20px; font-size: .92rem; }
+th, td { border-bottom: 1px solid var(--line); padding: 7px 8px; text-align: left; vertical-align: top; }
+th { color: var(--muted); font-weight: 600; white-space: nowrap; }
+td:first-child code { white-space: nowrap; }
+.wrap { overflow-x: auto; }
+.st { color: var(--muted); font-size: .85rem; white-space: nowrap; }
+.why { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 12px 0; }
+.warn { border-left: 3px solid var(--warn); background: var(--warn-soft); padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 12px 0; }
+nav.toc { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 18px; }
+nav.toc ol { margin: 0; padding-left: 1.3em; }
+nav.toc a { color: var(--accent); text-decoration: none; }
+.tag { display: inline-block; font-size: .75rem; padding: 0 7px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); margin-left: 4px; white-space: nowrap; }
+.tag.nj { border-color: var(--ok); color: var(--ok); }
+.tag.out { border-color: var(--warn); color: var(--warn); }
+footer { margin-top: 60px; color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<main>
+<h1>mhxx-rng API リファレンス</h1>
+<p class="lead">本家 <a href="https://github.com/apmnnn/mhxx-rng">apmnnn/mhxx-rng</a> のノートブック (コミット b882bae, 2026-04-20) を切り出した <code>reference/mhxx_rng.py</code> の、全部の関数と変数の一覧。mhxx-rand に移植するときの対照表として、何を読んで何を書き換えるか (グローバル変数) まで書く。使い方の説明は本家の <code>docs/functions.md</code> にあり、ここは中身の側から見たもの。</p>
+
+<nav class="toc">
+<ol>
+<li><a href="#model">全体の作り: 状態はグローバル変数</a></li>
+<li><a href="#usage">呼ぶ順番</a></li>
+<li><a href="#data">データの形 (p と c)</a></li>
+<li><a href="#config">設定: お守りの種類と言語</a></li>
+<li><a href="#rng">乱数</a></li>
+<li><a href="#charm">お守りを作る</a></li>
+<li><a href="#search">お守りの検索 (素の Python)</a></li>
+<li><a href="#fast">お守りの検索 (numba)</a></li>
+<li><a href="#melding">錬金と当たりフレーム</a></li>
+<li><a href="#list">並べて表示する</a></li>
+<li><a href="#combo">調合・クエスト報酬からの位置の特定</a></li>
+<li><a href="#notes">移植するときの注意</a></li>
+</ol>
+</nav>
+
+<h2 id="model">1. 全体の作り: 状態はグローバル変数</h2>
+<p>クラスはなく、状態は全部モジュールのグローバル変数に持つ。関数は引数ではなく、グローバル変数を読み書きして動く。大きく 4 組ある。</p>
+<div class="wrap"><table>
+<tr><th>組</th><th>変数</th><th>中身</th><th>書き換える関数</th></tr>
+<tr><td>乱数の状態</td><td><code>x, y, z, w, t</code></td><td>xorshift128 の状態 (<code>w</code> がその位置の乱数)。<code>t</code> は計算の途中の値</td><td><code>init</code> <code>ascend</code> <code>descend</code> <code>jump</code></td></tr>
+<tr><td></td><td><code>f</code></td><td>今の乱数位置 (初期値から何回進めたか)</td><td>同上</td></tr>
+<tr><td></td><td><code>r0</code>〜<code>r6</code></td><td>直近 7 個の乱数 (<code>r0</code> が古い)。お守り 1 個はこの 7 個から作る</td><td><code>roll</code> (<code>jump</code> も中で 7 回呼ぶ)</td></tr>
+<tr><td></td><td><code>s</code></td><td>乱数の初期値 <code>[0x0194FD72, 0x79E6C985, 0x08DD9701, 0x41CFCE91]</code> (書き換えない)</td><td>—</td></tr>
+<tr><td>お守りの表</td><td><code>skill1, sp1</code></td><td>第 1 スキルになれるスキル番号と、そのポイントの範囲 <code>(最小, 最大)</code></td><td><code>set_blue</code> などの 4 つ</td></tr>
+<tr><td></td><td><code>skill2, sp2</code></td><td>第 2 スキルになれるスキル番号と、<code>(マイナスの幅, 最大)</code></td><td>同上</td></tr>
+<tr><td></td><td><code>slotvalue</code></td><td>充足値 1〜20 ごとの、スロット 1・2・3 になるしきい値 (乱数 % 100 と比べる)</td><td>同上</td></tr>
+<tr><td></td><td><code>th</code></td><td>第 2 スキルが付くしきい値 (乱数 % 100 &gt;= th なら付く)。風化 15・古びた 25・光る 35・なぞ 100</td><td>同上</td></tr>
+<tr><td></td><td><code>kind</code></td><td>今の種類 (0 = 風化した、1 = 古びた、2 = 光る、3 = なぞの)</td><td>同上</td></tr>
+<tr><td>言語</td><td><code>skill</code></td><td>スキル番号 → スキル名 (日本語は 2 文字の略称)</td><td><code>set_ja</code> <code>set_en</code> <code>set_zh</code></td></tr>
+<tr><td></td><td><code>origin</code></td><td>原産地の名前 (<code>['マカ', '炭鉱']</code>)。添字 0 がマカ錬金、1 がクエスト報酬</td><td>同上</td></tr>
+<tr><td></td><td><code>kinds, melding</code></td><td>お守りの種類の名前、錬金の名前 (<code>['マカフシギ', '天運']</code>)</td><td>同上</td></tr>
+<tr><td></td><td><code>kind_width, noskill, skill_width</code></td><td>表示の幅と、第 2 スキルなしの表記</td><td>同上</td></tr>
+<tr><td>表示の設定</td><td><code>num_of_charms</code></td><td>クエスト報酬で同時に鑑定する個数 (当たりフレームの計算に使う)。既定 40</td><td>使う人が直接書く</td></tr>
+<tr><td></td><td><code>showallrank</code></td><td>錬金の当たりフレームを全ランク分出すか (False なら最高ランクだけ)</td><td>同上</td></tr>
+<tr><td></td><td><code>showrare</code></td><td>レア度を表示するか</td><td>同上</td></tr>
+</table></div>
+
+<div class="why"><strong>乱数位置の数え方。</strong> <code>jump(F)</code> の後は <code>r0</code>〜<code>r6</code> が位置 F〜F+6 の乱数で、<code>f</code> は F+7 になる。検索の関数が出す「found!frame is… <code>f - 7</code>」は、見つかったお守りの最初の乱数 (<code>r0</code>) の位置。</div>
+
+<h2 id="usage">2. 呼ぶ順番</h2>
+<pre><code>set_ja()                                   # 1. 言語 (skill と origin が決まる)
+set_blue()                                 # 2. お守りの種類 (表が決まる)
+p = parameter('連撃', 4, '痛撃', 5, 3, 'マカ')  # 3. 探すお守り (今の種類の表の中の位置に直す)
+search(0, 10000, p)                        # 4. 探す (結果は print するだけ)</code></pre>
+<p><code>parameter</code> は今の言語と種類の表を使って位置に直すので、1・2 より後に呼ぶ。種類を変えたら <code>p</code> も作り直す。</p>
+
+<h2 id="data">3. データの形 (p と c)</h2>
+<h3>p: 探すお守り (<code>parameter</code> の戻り値)</h3>
+<div class="wrap"><table>
+<tr><th>添字</th><th>名前</th><th>中身</th></tr>
+<tr><td>0</td><td><code>_id1</code></td><td>第 1 スキルの、<code>skill1</code> の中での位置 (スキル番号ではない)。指定なしは -1</td></tr>
+<tr><td>1</td><td><code>_sp1</code></td><td>第 1 スキルのポイント</td></tr>
+<tr><td>2</td><td><code>_id2</code></td><td>第 2 スキルの、<code>skill2</code> の中での位置。指定なし (<code>''</code>) は -1</td></tr>
+<tr><td>3</td><td><code>_sp2</code></td><td>第 2 スキルのポイント</td></tr>
+<tr><td>4</td><td><code>_slot</code></td><td>スロット数</td></tr>
+<tr><td>5</td><td><code>_origin</code></td><td>原産地 (0 = マカ、1 = 炭鉱)</td></tr>
+<tr><td>6, 7</td><td><code>_len1, _len2</code></td><td><code>skill1</code>・<code>skill2</code> の長さ (割る数)</td></tr>
+</table></div>
+<p>第 1・第 2 スキルを両方 <code>''</code> にすると、<code>_id1</code> は 0 になる。</p>
+
+<h3>c: 作ったお守り (<code>getcharm</code> の戻り値)</h3>
+<div class="wrap"><table>
+<tr><th>添字</th><th>中身</th></tr>
+<tr><td>0</td><td>第 1 スキルの番号</td></tr>
+<tr><td>1</td><td>第 1 スキルのポイント</td></tr>
+<tr><td>2</td><td>第 2 スキルの番号。付かなければ -1</td></tr>
+<tr><td>3</td><td>第 2 スキルのポイント (付かなければ 0)。第 1 スキルと同じスキルでも、マイナスでも、そのままの値</td></tr>
+<tr><td>4</td><td>スロット数 (0〜3)</td></tr>
+<tr><td>5</td><td>充足値 (第 2 スキルが第 1 と同じかマイナスなら、第 2 スキルのポイントを 0 として計算)</td></tr>
+<tr><td>6</td><td>スロットを決めた乱数 % 100</td></tr>
+<tr><td>7</td><td>レア度</td></tr>
+</table></div>
+
+<h2 id="config">4. 設定: お守りの種類と言語</h2>
+<div class="wrap"><table>
+<tr><th>関数</th><th>何をする</th><th>状態</th></tr>
+<tr><td><code>set_blue()</code></td><td>風化したお守りの表にする (th = 15、kind = 0)</td><td class="st">書く: skill1 sp1 skill2 sp2 slotvalue th kind</td></tr>
+<tr><td><code>set_red()</code></td><td>古びたお守り (th = 25、kind = 1)</td><td class="st">同上</td></tr>
+<tr><td><code>set_yellow()</code></td><td>光るお守り (th = 35、kind = 2)</td><td class="st">同上</td></tr>
+<tr><td><code>set_white()</code></td><td>なぞのお守り (th = 100 なので第 2 スキルは付かない、kind = 3)</td><td class="st">同上</td></tr>
+<tr><td><code>set_ja()</code></td><td>日本語にする (スキル名は 2 文字の略称。「毒　」のように全角スペースで埋めたものがある)</td><td class="st">書く: skill origin kinds melding kind_width noskill skill_width</td></tr>
+<tr><td><code>set_en()</code></td><td>英語にする</td><td class="st">同上</td></tr>
+<tr><td><code>set_zh()</code></td><td>簡体字の中国語にする</td><td class="st">同上</td></tr>
+</table></div>
+
+<h2 id="rng">5. 乱数</h2>
+<div class="wrap"><table>
+<tr><th>関数</th><th>何をする</th><th>状態</th></tr>
+<tr><td><code>init()</code></td><td>状態を初期値 <code>s</code> に戻し、<code>f = 0</code> にする</td><td class="st">書く: x y z w t f</td></tr>
+<tr><td><code>ascend()</code></td><td>乱数を 1 つ進める (xorshift128)。<code>f += 1</code></td><td class="st">書く: x y z w t f</td></tr>
+<tr><td><code>descend()</code></td><td>乱数を 1 つ戻す (ascend の逆)。<code>f -= 1</code></td><td class="st">書く: x y z w t f</td></tr>
+<tr><td><code>roll()</code></td><td><code>r0</code>〜<code>r6</code> を 1 つずらして今の <code>w</code> を <code>r6</code> に入れ、<code>ascend</code> する</td><td class="st">書く: r0〜r6 (と ascend の分)</td></tr>
+<tr><td><code>jump(frame)</code></td><td>位置 frame へ一気に飛び、<code>roll</code> を 7 回する (後は <code>r0</code> = 位置 frame の乱数、<code>f</code> = frame + 7)。GF(2) の多項式 x<sup>frame</sup> mod (特性多項式) を作り、それで状態を組み立てる</td><td class="st">書く: x y z w t f r0〜r6</td></tr>
+<tr><td><code>jumpshort(frame)</code></td><td><code>ascend</code> か <code>descend</code> を 1 つずつ繰り返して frame へ行き、<code>roll</code> を 7 回する。近い位置用。今の <code>f</code> から数えるので、行き先は <code>jump(frame)</code> と同じになる</td><td class="st">書く: 同上</td></tr>
+<tr><td><code>poly_mul(p1, p2)</code></td><td>GF(2) の多項式の掛け算 (繰り上がりなし)</td><td class="st">—</td></tr>
+<tr><td><code>poly_mod(p, m)</code></td><td>GF(2) の多項式の剰余 (m = 0 は不可)</td><td class="st">—</td></tr>
+<tr><td><code>poly_pow_mod(base, exp, mod)</code></td><td>GF(2) の多項式のべき乗の剰余</td><td class="st">—</td></tr>
+<tr><td><code>rand(num1, num2)</code></td><td>錬金の個数や色を決める別の乱数。num1 の下位 16 bit から始め、「0 なら 1 にして ×176 mod 65363」を num2 回</td><td class="st">—</td></tr>
+</table></div>
+
+<h2 id="charm">6. お守りを作る</h2>
+<div class="wrap"><table>
+<tr><th>関数</th><th>何をする</th><th>状態</th></tr>
+<tr><td><code>getcharm(_origin)</code></td><td><code>r0</code>〜<code>r6</code> からお守り c を作る。<code>r0</code> 第 1 スキル、<code>r1</code> そのポイント、<code>r2</code> 第 2 スキルが付くか、<code>r3</code> 第 2 スキル。マカ (0) は <code>r4</code> が第 2 のポイント、<code>r5</code> がスロット。炭鉱 (1) は <code>r4</code> が偶数ならマイナスもありで <code>r5</code> がポイント、<code>r6</code> がスロット。第 2 スキルが付かなければ、スロットは <code>r3</code></td><td class="st">読む: r0〜r6 と表</td></tr>
+<tr><td><code>slot(fill, num1)</code></td><td>充足値 fill と乱数 % 100 からスロット数を決める</td><td class="st">読む: slotvalue</td></tr>
+<tr><td><code>rare(slot, fill)</code></td><td>スロット数 × 2 + 充足値から、種類ごとのレア度を決める</td><td class="st">読む: kind</td></tr>
+<tr><td><code>parameter(str1, num1, str2, num2, num3, str3)</code></td><td>探すお守り p を作る。スキル名 (今の言語の略称)・ポイント・スロット数・原産地の名前を渡す。<code>''</code> はそのスキルを指定しない</td><td class="st">読む: skill origin skill1 skill2</td></tr>
+</table></div>
+
+<h2 id="search">7. お守りの検索 (素の Python)</h2>
+<p>どれも <code>jump(start)</code> してから <code>roll</code> を step 回繰り返し、毎回 <code>getcharm</code> で作ったお守りを比べる。結果は <code>print</code> するだけで、何も返さない。</p>
+<div class="wrap"><table>
+<tr><th>関数</th><th>何をする</th><th>出力</th></tr>
+<tr><td><code>search(start, step, p)</code></td><td>p と同じお守りを探す。第 2 スキルが <code>''</code> なら、第 2 スキルが画面に出ないもの (付かない・第 1 と同じ・0) だけ</td><td><span class="tag out">print</span> 位置と時間</td></tr>
+<tr><td><code>search_greater(start, step, p)</code></td><td>スキルが同じで、ポイントとスロットが p 以上のものを探す。第 1 か第 2 を <code>''</code> にすると、もう片方だけで探す</td><td><span class="tag out">print</span> <code>msg</code> (お守りと当たりフレーム)</td></tr>
+<tr><td><code>search_fill_slot(start, step, _fill, _slot, str1)</code></td><td>充足値とスロット数が同じものを探す (スキルは問わない)</td><td><span class="tag out">print</span> 位置とお守り</td></tr>
+</table></div>
+
+<h2 id="fast">8. お守りの検索 (numba)</h2>
+<p>7 と同じ検索を numba でコンパイルして速くしたもの。状態を tuple と numpy の配列で渡し、見つけた位置の一覧を返す。<code>show_fast</code> などが、見つけた位置へ <code>jump</code> し直して表示する。</p>
+<div class="wrap"><table>
+<tr><th>関数</th><th>何をする</th><th>状態・出力</th></tr>
+<tr><td><code>show_fast(start, step, funcname, p)</code></td><td>funcname が <code>'search'</code> か <code>'search_greater'</code>。中で下の <code>loop_*_nj</code> を選んで回す</td><td><span class="tag out">print</span> 書く: 乱数の状態</td></tr>
+<tr><td><code>show_fast_multi(start, step, *p_list)</code></td><td>どれかの p 以上のお守りを探す (<code>search_greater</code> の複数版)。p はどれも第 2 スキルありで、原産地は最初の p のもの</td><td><span class="tag out">print</span> 書く: 乱数の状態</td></tr>
+<tr><td><code>get_env()</code></td><td>今の種類の表を numpy の配列の tuple にする (<code>je</code>)</td><td class="st">読む: 表</td></tr>
+<tr><td><code>loop_search_nj(num, jr, js, jp, je)</code> <span class="tag nj">njit</span></td><td><code>search</code> の中身</td><td>見つけた位置の List</td></tr>
+<tr><td><code>loop_search_greater_nj(…)</code> <span class="tag nj">njit</span></td><td><code>search_greater</code> の中身 (両方のスキルを指定)</td><td>同上</td></tr>
+<tr><td><code>loop_search_greater_skill1_nj(…)</code> <span class="tag nj">njit</span></td><td>同 (第 1 スキルだけ指定)</td><td>同上</td></tr>
+<tr><td><code>loop_search_greater_skill2_nj(…)</code> <span class="tag nj">njit</span></td><td>同 (第 2 スキルだけ指定)</td><td>同上</td></tr>
+<tr><td><code>loop_search_greater_multi_nj(num, jr, js, jp_list, je, _origin)</code> <span class="tag nj">njit</span></td><td><code>show_fast_multi</code> の中身</td><td>同上</td></tr>
+<tr><td><code>ascend_nj(js)</code> <code>descend_nj(js)</code> <code>roll_nj(jr, js)</code> <span class="tag nj">njit</span></td><td><code>ascend</code>・<code>descend</code>・<code>roll</code> を、状態の tuple を受け取って返す形にしたもの (<code>js</code> = (x, y, z, w, t, f)、<code>jr</code> = (r0, …, r6))</td><td>新しい tuple</td></tr>
+<tr><td><code>getcharm_nj(_origin, jr, je)</code> <code>slot_nj</code> <code>rare_nj</code> <span class="tag nj">njit</span></td><td><code>getcharm</code>・<code>slot</code>・<code>rare</code> と同じ (表は je から読む)</td><td>c の tuple など</td></tr>
+<tr><td><code>mag_nj(m)</code> <code>div_nj(a, c, r)</code> <span class="tag nj">njit</span></td><td>「a % m == r か」を割り算なしで手早く見る (掛け算で代用)。偽陽性があるので、通った後に a &gt;= r を確かめて消す</td><td>真偽</td></tr>
+</table></div>
+
+<h2 id="melding">9. 錬金と当たりフレーム</h2>
+<p>錬金は、錬金した位置 F の 1 つ前の乱数で、出るお守りの種類と個数を決め、F から順にお守りを作る。お守り 1 個で乱数を 4 個 (第 2 スキルなし) か 6 個 (あり) 使う。マカフシギ錬金が <code>juju</code>、天運の錬金が <code>halcyon</code>。</p>
+<div class="wrap"><table>
+<tr><th>関数</th><th>何をする</th><th>状態・出力</th></tr>
+<tr><td><code>juju_colors(seed, rank)</code></td><td>マカフシギ錬金で出る種類の並び。風化した (0) と古びた (1) が、<code>rand(seed, 1)</code>・<code>rand(seed, 2)</code> で決まる個数ずつ。ランク 4 は風化 2 個 + 古びた 1〜2 個</td><td>種類の一覧</td></tr>
+<tr><td><code>halcyon_colors(seed, rank)</code></td><td>天運の錬金で出る種類の並び (光る・古びた・なぞの)。個数も種類も <code>rand</code> で決まる</td><td>種類の一覧</td></tr>
+<tr><td><code>meldingpush(frame, colorarrayfunc, rank)</code></td><td>位置 frame で錬金したときに出るお守りを、順に作って表示する。種類ごとに <code>set_*</code> を切り替え、最後に元の種類に戻す</td><td><span class="tag out">print</span> 書く: 乱数の状態 (表は戻す)</td></tr>
+<tr><td><code>jujupush(frame, rank=4)</code></td><td>マカフシギ錬金の結果 (<code>meldingpush</code>)</td><td><span class="tag out">print</span></td></tr>
+<tr><td><code>halcyonpush(frame, rank=4)</code></td><td>天運の錬金の結果</td><td><span class="tag out">print</span></td></tr>
+<tr><td><code>aimpoint_melding(num1, colorarrayfunc, rank)</code></td><td>今のお守り (<code>r0</code> から作るもの) に届く錬金の位置を、手前 num1 個について調べる (その位置で錬金すると、今の種類のお守りとしてここを通るか)</td><td><span class="tag out">print</span> 乱数は戻す</td></tr>
+<tr><td><code>_aimpoint_juju(rank)</code> <code>_aimpoint_halcyon(rank)</code></td><td>手前 19 個 (マカフシギ) / 31 個 (天運) で <code>aimpoint_melding</code></td><td><span class="tag out">print</span></td></tr>
+<tr><td><code>aimpoint_juju()</code> <code>aimpoint_halcyon()</code></td><td>上を全ランク分 (<code>showallrank</code>) か最高ランクだけ</td><td><span class="tag out">print</span></td></tr>
+<tr><td><code>aimpoint_blue()</code></td><td>風化したお守り用の簡易版。当たりフレームの数 (1〜3) だけ出す</td><td><span class="tag out">print</span> 乱数は戻す</td></tr>
+<tr><td><code>aimpoint_quest(num1)</code></td><td>クエスト報酬で num1 個同時に鑑定するときに、今のお守りに届く位置 (お守り 1 個で乱数を 4 個か 7 個使う)</td><td><span class="tag out">print</span> 乱数は戻す</td></tr>
+<tr><td><code>show_aimpoint(array, func)</code></td><td>当たりフレームの数と、◯ / Ｘ の並び (右端の [ ] が今の位置) を表示する</td><td><span class="tag out">print</span></td></tr>
+</table></div>
+
+<h2 id="list">10. 並べて表示する</h2>
+<div class="wrap"><table>
+<tr><th>関数</th><th>何をする</th><th>出力</th></tr>
+<tr><td><code>msg(c, _origin)</code></td><td>見つけたお守りの位置・中身・時間と、当たりフレームを表示する。マカは種類ごとの <code>aimpoint_*</code>、炭鉱は <code>aimpoint_quest(num_of_charms)</code></td><td><span class="tag out">print</span></td></tr>
+<tr><td><code>charmpush(c)</code></td><td>お守り 1 個を 1 行で表示する (レア度は色付き)</td><td><span class="tag out">print</span></td></tr>
+<tr><td><code>around(frame, num1, _origin)</code></td><td>位置 frame の前後 num1 個のお守りを並べる (0 は区切って出す)。_origin は原産地の名前</td><td><span class="tag out">print</span></td></tr>
+<tr><td><code>sequence_charm(frame, num1)</code></td><td>位置 frame から、クエスト報酬で num1 個同時に鑑定したときの結果</td><td><span class="tag out">print</span></td></tr>
+<tr><td><code>allpush(frame, num1, showall)</code></td><td>位置 frame から num1 個の乱数を、4 個ずつ 16 進で並べる。showall なら、スキル表で割った値と % 100 も</td><td><span class="tag out">print</span></td></tr>
+<tr><td><code>linepush()</code> <code>linepush2()</code> <code>skill1push()</code> <code>skill2push()</code> <code>modpush(num1)</code></td><td>今の <code>x, y, z, w</code> を 1 行で表示する (16 進 / 10 進 / 第 1 スキル名 / 第 2 スキル名 / % num1)</td><td><span class="tag out">print</span></td></tr>
+<tr><td><code>push(func, width)</code> <code>pr(str1, width, str2)</code></td><td>表示の下請け</td><td><span class="tag out">print</span></td></tr>
+<tr><td><code>watch(_f)</code></td><td>フレーム数を「日 時 分 秒 フレーム」(30 fps) に直して表示する</td><td><span class="tag out">print</span></td></tr>
+<tr><td><code>rare_rgb(rare)</code></td><td>レア度を色付きの文字列 (ANSI のエスケープ) にする</td><td>文字列</td></tr>
+</table></div>
+
+<h2 id="combo">11. 調合・クエスト報酬からの位置の特定</h2>
+<p>お守りではなく、調合でできた個数やクエスト報酬の並びから、乱数位置を逆に探す。乱数の列を、決まった間隔 (調合は 5 個おき、報酬は 1 個おき) で拾った値の並びとして、KMP で照合する。</p>
+<div class="wrap"><table>
+<tr><th>関数</th><th>何をする</th><th>出力</th></tr>
+<tr><td><code>search_combo(start, step, combo_str)</code></td><td>調合したときの所持数の並び (空白区切り) から、調合を始めた位置を探す。先頭 3 つと最後の 99 は使わない。差が 2〜4 でないところがあれば、そこに印を付けて止まる</td><td><span class="tag out">print</span></td></tr>
+<tr><td><code>search_reward(start, step, bonus_th, target_str, reward_table)</code></td><td>採取ツアーのクエスト報酬 (1 段目の 4〜8 個) から、報酬を作る直前の位置を探す。bonus_th は運気スキルによるしきい値</td><td><span class="tag out">print</span></td></tr>
+<tr><td><code>search_stride_nj(step, js, A, stride, lut)</code> <span class="tag nj">njit</span></td><td>乱数 (下位 16 bit % 100 を lut で記号に直したもの) の列を stride おきに見て、A に一致する位置を KMP で探す</td><td>位置の List</td></tr>
+<tr><td><code>kmp_prefix_nj(A)</code> <span class="tag nj">njit</span></td><td>KMP の失敗関数</td><td>配列</td></tr>
+<tr><td><code>combo_lookuptable()</code></td><td>% 100 から調合でできる個数へ: 0〜24 は 2 個、25〜74 は 3 個、75〜99 は 4 個</td><td>配列</td></tr>
+<tr><td><code>reward_lookuptable(reward_table)</code></td><td>% 100 から報酬の何番目のアイテムかへ (reward_table の値が累積のしきい値)</td><td>配列</td></tr>
+<tr><td><code>check_bonus(len1, four_nums, bonus_th)</code></td><td>報酬の個数が合うか (乱数の下位 5 bit が bonus_th 未満なら、報酬が 1 つ増える)</td><td>真偽</td></tr>
+<tr><td><code>show_invalid_differences(dif_A, combo_str)</code></td><td>調合の差の並びで 2〜4 でないところを表示する</td><td><span class="tag out">print</span> 真偽</td></tr>
+</table></div>
+
+<h2 id="notes">12. 移植するときの注意</h2>
+<div class="warn">
+<ul>
+<li><strong>結果を返さない。</strong> 検索の関数は print するだけ。比べるデータを作るときは、print を横取りするか、<code>loop_*_nj</code> の戻り値 (位置の一覧) を使う。</li>
+<li><strong>p はスキル番号ではなく、表の中の位置。</strong> 種類 (<code>set_*</code>) ごとに表が違うので、同じスキルでも p が変わる。</li>
+<li><strong>位置は f - 7。</strong> jump の後の <code>f</code> は 7 進んでいる (<code>r0</code> が位置 <code>f - 7</code> の乱数)。</li>
+<li><strong>錬金の関数は、種類の表を書き換えて戻す。</strong> <code>meldingpush</code> と <code>aimpoint_melding</code> は、途中で <code>set_*</code> を呼んでから元の種類に戻す。途中で止まると、表が別の種類のままになる。</li>
+<li><strong>第 2 スキルが画面に出ないことがある。</strong> 第 1 と同じスキルのときと、ポイントがマイナス (炭鉱) のとき、c[3] はそのままの値で、充足値の計算だけ 0 として扱う。</li>
+<li><strong>numba の範囲。</strong> <code>show_fast</code> は、f + step が 2<sup>63</sup> 未満になるように使う (numba の中で int64 を超えると float になる)。</li>
+</ul>
+</div>
+
+<footer>reference/mhxx_rng.py (本家 mhxx-rng.ipynb の 1st〜3rd セルの写し) から作成。本家のライセンスは MIT (reference/LICENSE)。</footer>
+</main>
+</body>
+</html>

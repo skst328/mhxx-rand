@@ -1,0 +1,19 @@
+[package]
+name = "mhxx-rand"
+version = "0.1.0"
+description = "MHXX の乱数とお守りの生成・検索 (apmnnn/mhxx-rng の非公式な Rust 移植)"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+# crates.io には出さない (アプリは git のタグで取り込む)
+publish = false
+
+[dependencies]
+
+# テストのときだけ使う (本家から書き出した正解 tests/fixtures/reference.json を読む)
+[dev-dependencies]
+serde_json = "1"
+
+[lints.clippy]
+# モジュールは foo.rs + foo/ の形にする (mod.rs は使わない)
+mod_module_files = "warn"
