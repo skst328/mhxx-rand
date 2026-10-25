@@ -109,3 +109,21 @@ def test_reprs():
     )
     assert repr(mr.search(q, 4723, 4724)[0]).startswith("Found(position=4723, kind=Kind.Weathered, charm=Charm(")
     assert repr(mr.GameTime(4723)) == "GameTime(4723)"
+
+
+def test_charm_str():
+    # 本家の charmpush と同じ形。1 文字の名前と KO・SP は全角スペースで 2 文字の幅に揃える
+    assert str(WANT) == "連撃  4 痛撃   5 S3"
+    assert str(mr.Charm(skill1=mr.Skill("特会"), pts1=6, slots=3)) == "特会  6 -------- S3"
+    ko = mr.Charm(skill1=mr.Skill("KO"), pts1=10, skill2=mr.Skill("毒"), pts2=-3, slots=0)
+    assert str(ko) == "KO　 10 毒　  -3 S0"
+
+
+def test_outcome_str():
+    # 本家の jujupush と同じく 1 個 1 行。種類の名前は全角 7 文字の幅に揃える
+    assert str(mr.Kind.Worn) == "古びたお守り"
+    assert str(mr.outcomes(mr.Melding.Juju, 4713, 4714)[0]) == (
+        "風化したお守り  回量  5 KO　   5 S0\n"
+        "風化したお守り  重強  2 真紫   3 S0\n"
+        "古びたお守り　  特会  1 白疾   1 S2"
+    )

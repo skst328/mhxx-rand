@@ -9,9 +9,9 @@ Python からも使える。
 ```python
 import mhxx_rand as mr
 
-want = mr.Charm(skill1=mr.Skill("連撃"), pts1=4,
-                skill2=mr.Skill("痛撃"), pts2=5, slots=3)
-q = mr.Query(mr.Melding.Juju, want, kind=mr.Kind.Weathered)
+charm = mr.Charm(skill1=mr.Skill("連撃"), pts1=4,
+                 skill2=mr.Skill("痛撃"), pts2=5, slots=3)
+q = mr.Query(mr.Melding.Juju, charm, kind=mr.Kind.Weathered)
 
 for f in mr.search(q, 0, 10**8, mr.Compare.AtLeast, nthreads=4):
     print("護石:", f.charm)
@@ -20,12 +20,24 @@ for f in mr.search(q, 0, 10**8, mr.Compare.AtLeast, nthreads=4):
         print(a.start, a.index, a.game_time())
     print("---")
 
+# 何通りもの護石をまとめて探す (f.index が qs の何番目か)
+charms = [
+    mr.Charm(skill1=mr.Skill("痛撃"), pts1=6, slots=3),
+    mr.Charm(skill1=mr.Skill("連撃"), pts1=5, slots=3),
+    mr.Charm(skill1=mr.Skill("特会"), pts1=6, slots=3),
+]
+qs = [mr.Query(mr.Melding.Juju, c) for c in charms]
+for f in mr.search_many(qs, 0, 10**6, mr.Compare.AtLeast, nthreads=4):
+    print(f.index, f.charm)   # 2 Charm(skill1=Skill("特会"), pts1=6, ...
+
 # その範囲で錬金したら何が出るか
 for o in mr.outcomes(mr.Melding.Juju, 4713, 4734):
-    print(o.frame, o.charms)
+    print(f"{o.frame}:")
+    for k, c in o.charms:
+        print(f"  {c}, {k}")   # 回量  5 KO　   5 S0, 風化したお守り
 
 # 鑑定画面で読んだ護石 (種類は分からない) と何個目から、錬金のフレームを探す
-targets = [mr.MeldingTarget(mr.Query(mr.Melding.Juju, want), 1)]
+targets = [mr.MeldingTarget(mr.Query(mr.Melding.Juju, charm), 1)]
 for m in mr.search_meldings(targets, 0, 10**7):
     print(m.frame, m.game_time())   # 4723 0d 0h 2m 37s 13f ...
 

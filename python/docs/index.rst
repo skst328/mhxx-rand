@@ -15,10 +15,10 @@ MHXX の乱数と、マカ錬金のお守りの生成・検索のライブラリ
 
    import mhxx_rand as mr
 
-   want = mr.Charm(skill1=mr.Skill("連撃"), pts1=4,
-                   skill2=mr.Skill("痛撃"), pts2=5, slots=3)
+   charm = mr.Charm(skill1=mr.Skill("連撃"), pts1=4,
+                    skill2=mr.Skill("痛撃"), pts2=5, slots=3)
    # kind を省略すると、風化・古びたのどちらでも
-   q = mr.Query(mr.Melding.Juju, want, kind=mr.Kind.Weathered)
+   q = mr.Query(mr.Melding.Juju, charm, kind=mr.Kind.Weathered)
 
    for f in mr.search(q, 0, 10**8, mr.Compare.AtLeast, nthreads=4):
        print("護石:", f.charm)
@@ -27,13 +27,35 @@ MHXX の乱数と、マカ錬金のお守りの生成・検索のライブラリ
            print(a.start, a.index, a.game_time())
        print("---")
 
+何通りもの護石をまとめて探すのは :func:`mhxx_rand.search_many`。
+乱数の列は種類ごとに 1 回だけ流すので、何個渡しても速さはほぼ同じ。
+どれで見つかったかは :attr:`mhxx_rand.Found.index` (qs の何番目か)。
+
+.. code-block:: python
+
+   charms = [
+       mr.Charm(skill1=mr.Skill("痛撃"), pts1=6, slots=3),
+       mr.Charm(skill1=mr.Skill("連撃"), pts1=5, slots=3),
+       mr.Charm(skill1=mr.Skill("特会"), pts1=6, slots=3),
+   ]
+   qs = [mr.Query(mr.Melding.Juju, c) for c in charms]
+   for f in mr.search_many(qs, 0, 10**6, mr.Compare.AtLeast, nthreads=4):
+       print(f.index, f.charm)
+       # 2 Charm(skill1=Skill("特会"), pts1=6, slots=3) ...
+
 狙ったフレームの前後で錬金したら何が出るかは、
 :func:`mhxx_rand.outcomes` で見る。
 
 .. code-block:: python
 
    for o in mr.outcomes(mr.Melding.Juju, 4713, 4734):
-       print(o.frame, o.game_time(), o.charms)
+       print(f"{o.frame}:")
+       for k, c in o.charms:
+           print(f"  {c}, {k}")
+       # 4713:
+       #   回量  5 KO　   5 S0, 風化したお守り
+       #   重強  2 真紫   3 S0, 風化したお守り
+       #   特会  1 白疾   1 S2, 古びたお守り
 
 鑑定画面で読んだ護石と何個目から、錬金したフレームを探すのは
 :func:`mhxx_rand.search_meldings`。読んだ護石は種類が分からないので、
@@ -42,7 +64,7 @@ Query の kind は省略する。
 
 .. code-block:: python
 
-   targets = [mr.MeldingTarget(mr.Query(mr.Melding.Juju, want), 1)]
+   targets = [mr.MeldingTarget(mr.Query(mr.Melding.Juju, charm), 1)]
    for m in mr.search_meldings(targets, 0, 10**7):
        print(m.frame, m.indexes, m.game_time())
        # 4723 [[1]] 0d 0h 2m 37s 13f ...

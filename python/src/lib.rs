@@ -18,6 +18,19 @@ enum Kind {
     Mystery,
 }
 
+#[pymethods]
+impl Kind {
+    /// 鑑定画面の名前 (「風化したお守り」など。本家の kinds)
+    fn __str__(&self) -> &'static str {
+        match self {
+            Self::Weathered => "風化したお守り",
+            Self::Worn => "古びたお守り",
+            Self::Shining => "光るお守り",
+            Self::Mystery => "なぞのお守り",
+        }
+    }
+}
+
 impl From<Kind> for rand::Kind {
     fn from(k: Kind) -> Self {
         match k {
@@ -96,6 +109,21 @@ impl Outcome {
     /// frame までの時間
     fn game_time(&self) -> GameTime {
         GameTime(self.0.game_time())
+    }
+
+    /// 本家の jujupush と同じく、出たお守りを 1 個 1 行で (「風化したお守り  連撃  5 -------- S0」)。
+    /// 種類の名前は本家と同じく全角 7 文字の幅に揃える
+    fn __str__(&self) -> String {
+        self.0
+            .charms
+            .iter()
+            .map(|&(k, c)| {
+                let kind = Kind::from(k).__str__();
+                let pad = "\u{3000}".repeat(7 - kind.chars().count());
+                format!("{kind}{pad}  {}", Charm(c).__str__())
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 
     fn __repr__(&self) -> String {
@@ -416,6 +444,27 @@ impl Charm {
     #[getter]
     fn slots(&self) -> u8 {
         self.0.slots
+    }
+
+    /// 本家の charmpush と同じ 1 行の形 (「連撃  4 痛撃   5 S3」)。
+    /// 第 2 スキルなしは、本家の「◯◯----」の代わりに、欄の幅 (名前 + 空白 + ポイント = 8 カラム) を - で埋める
+    /// (◯ は端末によって半角になり、縦の位置がずれるので)
+    fn __str__(&self) -> String {
+        // 本家と同じく、スキル名を全角 2 文字の幅に揃える (1 文字の名前と KO・SP は全角スペースで埋める)
+        fn name(s: rand::Skill) -> String {
+            let n = s.name();
+            let width: usize = n.chars().map(|c| if c.is_ascii() { 1 } else { 2 }).sum();
+            if width < 4 {
+                format!("{n}\u{3000}")
+            } else {
+                n.to_string()
+            }
+        }
+        let c = &self.0;
+        let skill2 = c.skill2.map_or("--------".to_string(), |(s, p)| {
+            format!("{} {p:>3}", name(s))
+        });
+        format!("{} {:>2} {skill2} S{}", name(c.skill1), c.pts1, c.slots)
     }
 
     fn __repr__(&self) -> String {
