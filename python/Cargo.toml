@@ -1,6 +1,6 @@
 [package]
 name = "mhxx-rand-py"
-version = "0.1.0"
+version = "0.2.0"
 description = "mhxx-rand の Python の入口 (pyo3)"
 edition.workspace = true
 license.workspace = true

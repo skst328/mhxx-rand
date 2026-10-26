@@ -345,7 +345,7 @@ impl From<Compare> for rand::Compare {
     }
 }
 
-/// お守りに付きうるスキル。Skill("連撃") のように、本家の日本語の略称で作る
+/// お守りに付きうるスキル。Skill("連撃") のように、本家の日本語の略称か正式名称 (鑑定画面の表記) で作る
 #[pyclass(eq, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 struct Skill(rand::Skill);
@@ -381,6 +381,11 @@ impl Skill {
     #[getter]
     fn name(&self) -> &'static str {
         self.0.name()
+    }
+
+    #[getter]
+    fn full_name(&self) -> &'static str {
+        self.0.full_name()
     }
 
     fn __repr__(&self) -> String {

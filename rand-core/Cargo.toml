@@ -1,6 +1,6 @@
 [package]
 name = "mhxx-rand"
-version = "0.1.0"
+version = "0.2.0"
 description = "MHXX の乱数とお守りの生成・検索 (apmnnn/mhxx-rng の非公式な Rust 移植)"
 edition.workspace = true
 license.workspace = true
