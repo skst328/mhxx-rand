@@ -28,49 +28,68 @@ fn at_least(c: &Charm, want: &Charm) -> bool {
             .is_none_or(|(s, p)| c.skill2.is_some_and(|(cs, cp)| cs == s && cp >= p))
 }
 
-/// 確かめる Query: よく出るもの・まれなもの・第 2 スキルなし・種類を省略したもの
-fn queries() -> Vec<(Query, Compare)> {
-    let q = |m, kind, c| Query::new(m, Rank::MAX, kind, &c).unwrap();
+/// 確かめる Query: よく出るもの・まれなもの・第 2 スキルなし・種類を省略したもの・
+/// AtLeast で第 1・第 2 スキルのポイントが種類の最小より小さいもの
+fn queries() -> Vec<Query> {
+    let q = |m, kind, c, compare| Query::new(m, Rank::MAX, kind, &c, compare).unwrap();
+    let w = Some(Kind::Weathered);
     vec![
-        (
-            q(
-                Melding::Juju,
-                Some(Kind::Weathered),
-                charm("斬味", 5, None, 1),
-            ),
+        q(Melding::Juju, w, charm("斬味", 5, None, 1), Compare::Exact),
+        q(
+            Melding::Juju,
+            w,
+            charm("斬味", 4, Some(("攻撃", 5)), 1),
+            Compare::AtLeast,
+        ),
+        q(
+            Melding::Juju,
+            Some(Kind::Worn),
+            charm("火攻", 2, None, 0),
+            Compare::AtLeast,
+        ),
+        q(
+            Melding::Juju,
+            None,
+            charm("聴覚", 3, None, 0),
             Compare::Exact,
         ),
-        (
-            q(
-                Melding::Juju,
-                Some(Kind::Weathered),
-                charm("斬味", 4, Some(("攻撃", 5)), 1),
-            ),
+        q(
+            Melding::Juju,
+            None,
+            charm("聴覚", 3, Some(("風圧", 3)), 0),
             Compare::AtLeast,
         ),
-        (
-            q(Melding::Juju, Some(Kind::Worn), charm("火攻", 2, None, 0)),
+        q(
+            Melding::Halcyon,
+            Some(Kind::Shining),
+            charm("攻撃", 1, None, 0),
             Compare::AtLeast,
         ),
-        (
-            q(Melding::Juju, None, charm("聴覚", 3, None, 0)),
+        q(
+            Melding::Halcyon,
+            None,
+            charm("体力", 3, None, 0),
             Compare::Exact,
         ),
-        (
-            q(Melding::Juju, None, charm("聴覚", 3, Some(("風圧", 3)), 0)),
+        // 風化したお守りの斬味は 3〜7 なので、1 以上は風化の 3〜7 も全部当たる
+        q(
+            Melding::Juju,
+            None,
+            charm("斬味", 1, Some(("攻撃", 5)), 1),
             Compare::AtLeast,
         ),
-        (
-            q(
-                Melding::Halcyon,
-                Some(Kind::Shining),
-                charm("攻撃", 1, None, 0),
-            ),
+        q(
+            Melding::Juju,
+            w,
+            charm("斬味", 1, None, 2),
             Compare::AtLeast,
         ),
-        (
-            q(Melding::Halcyon, None, charm("体力", 3, None, 0)),
-            Compare::Exact,
+        // 第 2 スキルのポイントは 1 からなので、-3 以上は攻撃が付けば全部当たる
+        q(
+            Melding::Juju,
+            w,
+            charm("斬味", 5, Some(("攻撃", -3)), 1),
+            Compare::AtLeast,
         ),
     ]
 }
@@ -80,8 +99,9 @@ fn queries() -> Vec<(Query, Compare)> {
 fn search_matches_brute_force() {
     for start in [0u64, 999_950_000] {
         let frames = start..start + 50_000;
-        for (q, compare) in queries() {
-            let got: Vec<(u64, Kind)> = search(&q, compare, frames.clone())
+        for q in queries() {
+            let compare = q.compare();
+            let got: Vec<(u64, Kind)> = search(&q, frames.clone())
                 .iter()
                 .map(|f| (f.position, f.kind))
                 .collect();
@@ -92,9 +112,12 @@ fn search_matches_brute_force() {
                 s = ascend(s);
                 w
             });
+            // 種類は Query の出うる種類ではなく、指定の種類 (省略なら錬金で出る種類の全部) で作る
+            // (Query を作るときに外した種類の取りこぼしも見つかるように)
+            let kinds: Vec<Kind> = q.kind().map_or(q.melding().kinds().to_vec(), |k| vec![k]);
             let mut want = Vec::new();
             for p in frames.clone() {
-                for k in q.kinds() {
+                for &k in &kinds {
                     let c = make(k, &r).shown();
                     let hit = match compare {
                         Compare::Exact => c == *q.charm(),
@@ -126,9 +149,13 @@ fn aimpoints_match_outcomes() {
         .into_iter()
         .map(|m| (m, outcomes(m, Rank::MAX, frames.clone())))
         .collect();
-    for (q, compare) in queries() {
+    for q in queries() {
+        let compare = q.compare();
+        // 種類は Query の出うる種類ではなく、指定の種類 (省略なら錬金で出る種類の全部) と比べる
+        // (Query を作るときに外した種類の取りこぼしも見つかるように)
+        let kind_ok = |k: Kind| q.kind().is_none_or(|qk| qk == k);
         let matches = |k: Kind, c: &Charm| {
-            q.kinds().any(|qk| qk == k)
+            kind_ok(k)
                 && match compare {
                     Compare::Exact => c == q.charm(),
                     Compare::AtLeast => at_least(c, q.charm()),
@@ -151,7 +178,7 @@ fn aimpoints_match_outcomes() {
             .collect();
         // 検索から: 錬金のフレームが範囲に入るもの (位置は錬金のフレームより最大 30 後ろ)
         let mut got = BTreeSet::new();
-        for f in search(&q, compare, frames.start..frames.end + 30) {
+        for f in search(&q, frames.start..frames.end + 30) {
             for a in f.aimpoints() {
                 let o = &outcomes(q.melding(), q.rank(), a.start..a.start + 1)[0];
                 assert_eq!(
@@ -175,9 +202,9 @@ fn aimpoints_match_outcomes() {
 /// 種類を省略した Query は、出うる種類ごとの Query を合わせたものと同じ
 #[test]
 fn any_kind_is_union_of_kinds() {
-    for (q, compare) in queries().into_iter().filter(|(q, _)| q.kind().is_none()) {
+    for q in queries().into_iter().filter(|q| q.kind().is_none()) {
         let frames = 0..3_000_000;
-        let got: Vec<(u64, Kind)> = search(&q, compare, frames.clone())
+        let got: Vec<(u64, Kind)> = search(&q, frames.clone())
             .iter()
             .map(|f| (f.position, f.kind))
             .collect();
@@ -185,9 +212,11 @@ fn any_kind_is_union_of_kinds() {
             .melding()
             .kinds()
             .iter()
-            .filter_map(|&k| Query::new(q.melding(), q.rank(), Some(k), q.charm()).ok())
+            .filter_map(|&k| {
+                Query::new(q.melding(), q.rank(), Some(k), q.charm(), q.compare()).ok()
+            })
             .flat_map(|qk| {
-                search(&qk, compare, frames.clone())
+                search(&qk, frames.clone())
                     .into_iter()
                     .map(|f| (f.position, f.kind))
             })
@@ -197,14 +226,20 @@ fn any_kind_is_union_of_kinds() {
     }
 }
 
-/// search_many は、Query ごとの search を位置の順に合わせたものと同じ (種類や錬金のやり方が混ざっていても)
+/// search_many は、Query ごとの search を位置の順に合わせたものと同じ (種類や錬金のやり方、比べ方が混ざっていても)。
+/// 比べ方をどちらかにそろえたときも同じ
 #[test]
 fn search_many_matches_search() {
-    let qs = queries();
-    for compare in [Compare::Exact, Compare::AtLeast] {
-        let all: Vec<Query> = qs.iter().map(|(q, _)| q.clone()).collect();
+    let mixed = queries();
+    let with = |compare| -> Vec<Query> {
+        mixed
+            .iter()
+            .filter_map(|q| Query::new(q.melding(), q.rank(), q.kind(), q.charm(), compare).ok())
+            .collect()
+    };
+    for all in [mixed.clone(), with(Compare::Exact), with(Compare::AtLeast)] {
         let frames = 0..3_000_000;
-        let got: Vec<(u64, usize, Kind)> = search_many(&all, compare, frames.clone())
+        let got: Vec<(u64, usize, Kind)> = search_many(&all, frames.clone())
             .iter()
             .map(|f| (f.position, f.index, f.kind))
             .collect();
@@ -212,33 +247,27 @@ fn search_many_matches_search() {
             .iter()
             .enumerate()
             .flat_map(|(i, q)| {
-                search(q, compare, frames.clone())
+                search(q, frames.clone())
                     .into_iter()
                     .map(move |f| (f.position, i, f.kind))
             })
             .collect();
         want.sort_by_key(|&(p, i, k)| (p, i, k as u8));
-        assert_eq!(got, want, "{compare:?}");
+        assert_eq!(got, want, "{all:?}");
     }
 }
 
 /// 範囲を区切って探しても、通して探したものと同じ (区切りの前後・長さ 0 と 1 も)
 #[test]
 fn split_ranges_give_same_result() {
-    for (q, compare) in queries() {
-        let whole: Vec<u64> = search(&q, compare, 0..200_000)
-            .iter()
-            .map(|f| f.position)
-            .collect();
+    for q in queries() {
+        let whole: Vec<u64> = search(&q, 0..200_000).iter().map(|f| f.position).collect();
         for cut in [0, 1, 3, 77_777, 199_999, 200_000] {
-            let mut parts: Vec<u64> = search(&q, compare, 0..cut)
-                .iter()
-                .map(|f| f.position)
-                .collect();
-            parts.extend(search(&q, compare, cut..200_000).iter().map(|f| f.position));
+            let mut parts: Vec<u64> = search(&q, 0..cut).iter().map(|f| f.position).collect();
+            parts.extend(search(&q, cut..200_000).iter().map(|f| f.position));
             assert_eq!(parts, whole, "{q:?} 区切り {cut}");
         }
-        assert!(search(&q, compare, 10..10).is_empty());
+        assert!(search(&q, 10..10).is_empty());
     }
 }
 
@@ -286,7 +315,12 @@ fn skill_info_covers_melded_charms() {
                         skill2: None,
                         slots: 0,
                     };
-                    assert!(Query::new(m, Rank::MAX, None, &c).is_ok(), "{i:?} {p}");
+                    for compare in [Compare::Exact, Compare::AtLeast] {
+                        assert!(
+                            Query::new(m, Rank::MAX, None, &c, compare).is_ok(),
+                            "{i:?} {p} {compare:?}"
+                        );
+                    }
                 }
             }
         }
@@ -296,7 +330,7 @@ fn skill_info_covers_melded_charms() {
 /// 出ないお守りは、Query を作る時点で理由付きの Err になる
 #[test]
 fn impossible_queries_are_errors() {
-    let err = |m, kind, c: Charm| Query::new(m, Rank::MAX, kind, &c).unwrap_err();
+    let err = |m, kind, c: Charm| Query::new(m, Rank::MAX, kind, &c, Compare::Exact).unwrap_err();
     let one = |k, r| QueryError::Impossible(vec![(k, r)]);
     let w = Some(Kind::Weathered);
     // マカフシギ錬金では光るお守りは出ない
@@ -349,6 +383,75 @@ fn impossible_queries_are_errors() {
         ])
     );
     // 片方の種類で出れば Err にならず、出る種類だけで探す
-    let q = Query::new(Melding::Juju, Rank::MAX, None, &charm("斬味", 7, None, 0)).unwrap();
+    let q = Query::new(
+        Melding::Juju,
+        Rank::MAX,
+        None,
+        &charm("斬味", 7, None, 0),
+        Compare::Exact,
+    )
+    .unwrap();
     assert_eq!(q.kinds().collect::<Vec<_>>(), [Kind::Weathered]);
+}
+
+/// AtLeast では、第 2 スキルのポイントが表の最小 (1) より小さくても、出ないことにしない (1 から探す)。
+/// 最大より大きければ、AtLeast でも出ない
+#[test]
+fn at_least_pts2_below_minimum() {
+    let new = |p2, compare| {
+        let c = charm("斬味", 5, Some(("攻撃", p2)), 0);
+        Query::new(Melding::Juju, Rank::MAX, Some(Kind::Weathered), &c, compare)
+    };
+    let positions =
+        |q: &Query| -> Vec<u64> { search(q, 0..1_000_000).iter().map(|f| f.position).collect() };
+    let one = positions(&new(1, Compare::AtLeast).unwrap());
+    assert!(!one.is_empty());
+    for p2 in [-128, -3, 0] {
+        assert_eq!(
+            new(p2, Compare::Exact).unwrap_err(),
+            QueryError::Impossible(vec![(Kind::Weathered, Reason::Pts2)]),
+            "{p2}"
+        );
+        assert_eq!(positions(&new(p2, Compare::AtLeast).unwrap()), one, "{p2}");
+    }
+    // 攻撃 11 は、風化したお守りの第 2 スキルの範囲の外 (impossible_queries_are_errors と同じ)
+    assert_eq!(
+        new(11, Compare::AtLeast).unwrap_err(),
+        QueryError::Impossible(vec![(Kind::Weathered, Reason::Pts2)])
+    );
+}
+
+/// AtLeast では、第 1 スキルのポイントがその種類の最小より小さくても、その種類を外さない (最小から探す)。
+/// 最大より大きければ、AtLeast でも出ない
+#[test]
+fn at_least_keeps_kinds_below_minimum() {
+    let new = |kind, c: Charm, compare| Query::new(Melding::Juju, Rank::MAX, kind, &c, compare);
+    let w = Some(Kind::Weathered);
+    // 風化したお守りの斬味は 3〜7
+    for p in [-10, 1, 2] {
+        let c = charm("斬味", p, None, 0);
+        assert_eq!(
+            new(w, c, Compare::Exact).unwrap_err(),
+            QueryError::Impossible(vec![(Kind::Weathered, Reason::Pts1)]),
+            "{p}"
+        );
+        let q = new(None, c, Compare::AtLeast).unwrap();
+        assert!(q.kinds().any(|k| k == Kind::Weathered), "{p}");
+        // 最小から探すので、3 以上で探したものと同じ位置が見つかる
+        let three = new(w, charm("斬味", 3, None, 0), Compare::AtLeast).unwrap();
+        let positions = |q: &Query| -> Vec<u64> {
+            search(q, 0..1_000_000)
+                .iter()
+                .filter(|f| f.kind == Kind::Weathered)
+                .map(|f| f.position)
+                .collect()
+        };
+        let below = positions(&new(w, c, Compare::AtLeast).unwrap());
+        assert!(!below.is_empty());
+        assert_eq!(below, positions(&three), "{p}");
+    }
+    assert_eq!(
+        new(w, charm("斬味", 8, None, 0), Compare::AtLeast).unwrap_err(),
+        QueryError::Impossible(vec![(Kind::Weathered, Reason::Pts1)])
+    );
 }

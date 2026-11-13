@@ -8,41 +8,26 @@ use std::sync::Arc;
 use crate::charm::{Charm, Kind, make, state};
 use crate::found::Found;
 use crate::melding::{kinds, meld_with};
-use crate::query::{Lookup, Query};
+use crate::query::{Compare, Lookup, Query};
 use crate::rng::{ascend, jump};
 
-/// 見つけたお守りと、探すお守りの比べ方
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Compare {
-    /// 中身が同じ (本家の search)
-    Exact,
-    /// スキルが同じで、ポイントとスロットが以上 (本家の search_greater)
-    AtLeast,
-}
-
-/// frames の範囲で、query のお守りが作られる位置 (お守りの最初の乱数の位置) を探す。
+/// frames の範囲で、query のお守りが作られる位置 (お守りの最初の乱数の位置) を、query の比べ方で探す。
 /// AtLeast で第 2 スキルを指定しなければ、第 2 スキルは問わない (本家の search_greater で '' にしたとき)。
 /// Query の種類が決まっていなければ、出うる種類ごとに探し、[`Found::kind`] にどの種類として見つかったかを入れる。
 /// 見つけた位置の小さい順 (同じ位置なら [`Kind`] の定義の順) に返す。錬金のフレームへは [`Found::aimpoints`] で直す
-pub fn search(query: &Query, compare: Compare, frames: Range<u64>) -> Vec<Found> {
-    search_many(std::slice::from_ref(query), compare, frames)
+pub fn search(query: &Query, frames: Range<u64>) -> Vec<Found> {
+    search_many(std::slice::from_ref(query), frames)
 }
 
-/// kind の表で、lookup・want のお守りが作られる位置を探す (乱数の列を 1 回流す)
-fn search_kind(
-    kind: Kind,
-    lookup: &Lookup,
-    want: &Charm,
-    compare: Compare,
-    frames: Range<u64>,
-) -> Vec<u64> {
+/// kind の表で、lookup・query のお守りが作られる位置を探す (乱数の列を 1 回流す)
+fn search_kind(kind: Kind, lookup: &Lookup, query: &Query, frames: Range<u64>) -> Vec<u64> {
+    let (want, compare) = (&query.charm, query.compare);
     let t = kind.table();
     let l = lookup;
     let skill1 = Remainder::new(t.skill1.len() as u32, l.loc1);
     let width1 = FastMod::new(l.width1);
     let pts1 = pts1_mask(compare, l.width1, l.rem1);
-    let skill2 = l.loc2.map(|loc2| {
-        let pts2 = want.skill2.expect("loc2 があれば第 2 スキルがある").1;
+    let skill2 = l.loc2.map(|(loc2, pts2)| {
         let mut p = Pts2::new(t.pts2[loc2 as usize].1);
         p.add(compare, pts2);
         (Remainder::new(t.skill2.len() as u32, loc2), p)
@@ -64,10 +49,11 @@ fn search_kind(
     scan(frames, quick, full)
 }
 
-/// queries のどれかが作られる位置を探す。位置の小さい順、同じ位置なら queries の順 ([`Found::index`] が何番目か)、
+/// queries のどれかが (それぞれの比べ方で) 作られる位置を探す。比べ方が混ざっていてもよい。
+/// 位置の小さい順、同じ位置なら queries の順 ([`Found::index`] が何番目か)、
 /// さらに同じなら [`Kind`] の定義の順。乱数の列は、お守りの種類ごとに 1 回だけ流す (本家の show_fast_multi)。
 /// Query 1 個だけなら、1 回で済む専用の探し方 (search_kind) を使う
-pub fn search_many(queries: &[Query], compare: Compare, frames: Range<u64>) -> Vec<Found> {
+pub fn search_many(queries: &[Query], frames: Range<u64>) -> Vec<Found> {
     // 種類ごとに、その種類で探す (queries の何番目か, 表の中の位置)
     let mut groups: Vec<(Kind, Vec<(usize, &Lookup)>)> = Vec::new();
     for (i, q) in queries.iter().enumerate() {
@@ -83,11 +69,11 @@ pub fn search_many(queries: &[Query], compare: Compare, frames: Range<u64>) -> V
         .iter()
         .flat_map(|(kind, entries)| {
             let hits = match entries.as_slice() {
-                [(i, l)] => search_kind(*kind, l, &queries[*i].charm, compare, frames.clone())
+                [(i, l)] => search_kind(*kind, l, &queries[*i], frames.clone())
                     .into_iter()
                     .map(|p| (p, *i))
                     .collect(),
-                _ => search_group(*kind, entries, queries, compare, frames.clone()),
+                _ => search_group(*kind, entries, queries, frames.clone()),
             };
             let qs = &qs;
             hits.into_iter().map(move |(position, index)| Found {
@@ -133,8 +119,10 @@ impl Pts2 {
         }
     }
 
-    /// pts2 (1 以上) を探す Query の分を通すようにする。Exact はその 1 つ、AtLeast はそれ以上の全部
+    /// pts2 (1 以上。Lookup の、表の範囲に収めたもの) を探す Query の分を通すようにする。
+    /// Exact はその 1 つ、AtLeast はそれ以上の全部
     fn add(&mut self, compare: Compare, pts2: i8) {
+        debug_assert!(pts2 >= 1);
         let ones = |n: u32| if n >= 32 { u32::MAX } else { (1 << n) - 1 };
         let v = pts2 as u32 - 1;
         self.mask |= match compare {
@@ -167,7 +155,6 @@ fn search_group(
     kind: Kind,
     entries: &[(usize, &Lookup)],
     queries: &[Query],
-    compare: Compare,
     frames: Range<u64>,
 ) -> Vec<(u64, usize)> {
     let t = kind.table();
@@ -184,16 +171,17 @@ fn search_group(
         })
         .collect();
     for &(i, l) in entries {
+        let compare = queries[i].compare;
         let b = &mut buckets[l.loc1 as usize];
         b.pts1 |= pts1_mask(compare, l.width1, l.rem1);
-        match (l.loc2, queries[i].charm.skill2) {
-            (Some(l), Some((_, pts2))) => {
+        match l.loc2 {
+            Some((l, pts2)) => {
                 let (v, p) = b.by2[l as usize]
                     .get_or_insert_with(|| (Vec::new(), Pts2::new(t.pts2[l as usize].1)));
                 v.push(i);
                 p.add(compare, pts2);
             }
-            _ => b.no2.push(i),
+            None => b.no2.push(i),
         }
     }
 
@@ -222,7 +210,7 @@ fn search_group(
     let make_charm = |s: &[u32; 4]| make(kind, &seven(s)).shown();
     let test = |c: &Charm, i: usize| {
         let want = &queries[i].charm;
-        match compare {
+        match queries[i].compare {
             Compare::Exact => c == want,
             Compare::AtLeast => at_least(c, want),
         }
@@ -373,6 +361,9 @@ pub enum MeldingError {
     /// 何個目が 1〜その錬金の最大の数でない (鑑定ボックスで読んだ位置が最大の数を超えたら、1 回の錬金の中での
     /// 位置ではないので、呼ぶ側で None にして渡す)
     Index { index: u8 },
+    /// 比べ方が Exact でない Query がある (target は targets の何番目か)。鑑定画面で読んだ中身と同じかで
+    /// 照合するので、AtLeast では探せない
+    NotExact { target: usize },
 }
 
 impl std::fmt::Display for MeldingError {
@@ -380,6 +371,9 @@ impl std::fmt::Display for MeldingError {
         match self {
             Self::Mixed => write!(f, "錬金のやり方かランクが揃っていない"),
             Self::Index { index } => write!(f, "何個目が 1 回の錬金の中での位置でない ({index})"),
+            Self::NotExact { target } => {
+                write!(f, "比べ方が Exact でない Query がある (targets[{target}])")
+            }
         }
     }
 }
@@ -391,7 +385,7 @@ const WINDOW: usize = 64;
 
 /// frames の範囲の錬金のフレームのうち、targets が全部 (index があればその何個目に、全部が別の位置に) 出るものを、
 /// お守りごとの何個目と一緒に返す (フレームの小さい順。mhxx-renkin-reader の search_frames)。targets が空なら空。
-/// targets は同じ錬金 (やり方とランク) のもの。
+/// targets は同じ錬金 (やり方とランク) のもので、比べ方は Exact (鑑定画面で読んだ中身と同じかで照合する)。
 ///
 /// フレームごとに錬金をたどると重いので、逆からたどる: 乱数の列を 1 回だけ流し、「この位置の乱数から作るお守りが
 /// 手がかりのお守りになる」位置 p を探す (第 1 スキルが合うだけで 1/60 程度なので、まれ)。見つかったら、p を
@@ -410,6 +404,12 @@ pub fn search_meldings(
         .any(|t| t.query.melding != melding || t.query.rank != rank)
     {
         return Err(MeldingError::Mixed);
+    }
+    if let Some(target) = targets
+        .iter()
+        .position(|t| t.query.compare != Compare::Exact)
+    {
+        return Err(MeldingError::NotExact { target });
     }
     if let Some(index) = targets
         .iter()
@@ -462,8 +462,9 @@ pub fn search_meldings(
                 let t = k.table();
                 if at(p) % len1 != l.loc1
                     || at(p + 1) % l.width1 != l.rem1
-                    || l.loc2
-                        .is_some_and(|l2| at(p + 2) % 100 < t.no_skill2 || at(p + 3) % len2 != l2)
+                    || l.loc2.is_some_and(|(l2, _)| {
+                        at(p + 2) % 100 < t.no_skill2 || at(p + 3) % len2 != l2
+                    })
                 {
                     continue;
                 }

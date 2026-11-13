@@ -19,13 +19,29 @@ def test_search_finds_the_readme_example():
 
 @pytest.mark.parametrize("nthreads", [2, 3, 7])
 def test_nthreads_give_same_result(nthreads):
-    q = mr.Query(mr.Melding.Juju, mr.Charm(mr.Skill("聴覚"), 3))
+    q = mr.Query(mr.Melding.Juju, mr.Charm(mr.Skill("聴覚"), 3), compare=mr.Compare.AtLeast)
     key = lambda fs: [(f.position, f.kind, f.index) for f in fs]
-    assert key(mr.search(q, 5, 1_000_003, mr.Compare.AtLeast, nthreads=nthreads)) == key(
-        mr.search(q, 5, 1_000_003, mr.Compare.AtLeast)
-    )
+    assert key(mr.search(q, 5, 1_000_003, nthreads=nthreads)) == key(mr.search(q, 5, 1_000_003))
     qs = [q, mr.Query(mr.Melding.Halcyon, mr.Charm(mr.Skill("体力"), 3))]
     assert key(mr.search_many(qs, 0, 1_000_000, nthreads=nthreads)) == key(mr.search_many(qs, 0, 1_000_000))
+
+
+def test_compare_belongs_to_query():
+    # 比べ方は Query が持つ (既定は Exact)。AtLeast なら、指定より大きいポイントの護石も見つかる
+    assert mr.Query(mr.Melding.Juju, WANT).compare == mr.Compare.Exact
+    at_least = mr.Charm(skill1=mr.Skill("連撃"), pts1=1, skill2=mr.Skill("痛撃"), pts2=1, slots=0)
+    q = mr.Query(mr.Melding.Juju, at_least, kind=mr.Kind.Weathered, compare=mr.Compare.AtLeast)
+    assert q.compare == mr.Compare.AtLeast
+    assert 4723 in [f.position for f in mr.search(q, 0, 10_000)]
+
+
+def test_at_least_keeps_kinds_below_minimum():
+    # 風化したお守りの斬味は 3〜7。Exact の 1 は出ないが、AtLeast の 1 以上は風化の 3〜7 も探す
+    low = mr.Charm(mr.Skill("斬味"), 1)
+    with pytest.raises(ValueError):
+        mr.Query(mr.Melding.Juju, low, kind=mr.Kind.Weathered)
+    q = mr.Query(mr.Melding.Juju, low, compare=mr.Compare.AtLeast)
+    assert mr.Kind.Weathered in {f.kind for f in mr.search(q, 0, 100_000)}
 
 
 def test_skill_names_and_ids():
@@ -91,6 +107,10 @@ def test_search_meldings():
     halcyon = mr.MeldingTarget(mr.Query(mr.Melding.Halcyon, worn))
     with pytest.raises(ValueError):
         mr.search_meldings([targets[0], halcyon], 0, 10)
+    # 読んだ中身と同じかで照合するので、AtLeast の Query は探せない
+    at_least = mr.MeldingTarget(mr.Query(mr.Melding.Juju, worn, compare=mr.Compare.AtLeast))
+    with pytest.raises(ValueError, match="Exact"):
+        mr.search_meldings([targets[0], at_least], 0, 10)
 
 
 def test_game_time():
@@ -105,7 +125,7 @@ def test_reprs():
     q = mr.Query(mr.Melding.Juju, WANT)
     assert repr(q) == (
         'Query(melding=Melding.Juju, charm=Charm(skill1=Skill("連撃"), pts1=4, skill2=Skill("痛撃"), pts2=5, slots=3), '
-        "kind=None, rank=4)"
+        "kind=None, rank=4, compare=Compare.Exact)"
     )
     assert repr(mr.search(q, 4723, 4724)[0]).startswith("Found(position=4723, kind=Kind.Weathered, charm=Charm(")
     assert repr(mr.GameTime(4723)) == "GameTime(4723)"

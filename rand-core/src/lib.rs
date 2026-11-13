@@ -33,9 +33,7 @@ pub use combo::{
 };
 pub use found::{Aimpoint, Found};
 pub use melding::{Melding, Outcome, Rank, SkillInfo, meld, outcomes, skill_info};
-pub use query::{Query, QueryError, Reason};
-pub use search::{
-    Compare, FrameMatch, MeldingError, MeldingTarget, search, search_many, search_meldings,
-};
+pub use query::{Compare, Query, QueryError, Reason};
+pub use search::{FrameMatch, MeldingError, MeldingTarget, search, search_many, search_meldings};
 pub use skill::Skill;
 pub use time::{FPS, GameTime};

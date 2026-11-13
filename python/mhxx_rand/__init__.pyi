@@ -190,11 +190,17 @@ class Query:
     melding と rank は、見つけた位置を錬金のフレームに直すとき
     (:meth:`Found.aimpoints`) に使う (お守り 1 個の作り方は変わらない)。
 
+    compare が :attr:`Compare.AtLeast` なら、
+    スキルのポイントがその種類の最小より小さくても、
+    その種類は外さない (その種類で出るポイントは全部、指定以上なので)。
+
     :param melding: 錬金のやり方
     :param charm: 探すお守りの中身
     :param kind: お守りの種類。None (省略) はその錬金で出る種類のどれか
     :param rank: 投入する素材のランク (1〜4。既定は最高ランク)
-    :raises ValueError: その錬金・種類で出ないお守り
+    :param compare: 見つけたお守りとの比べ方
+        (既定は :attr:`Compare.Exact`)
+    :raises ValueError: その錬金・種類で (その比べ方で) 出ないお守り
         (種類ごとの理由も付く)、rank が 1〜4 でない
     """
 
@@ -204,10 +210,14 @@ class Query:
         charm: Charm,
         kind: Kind | None = None,
         rank: int = 4,
+        compare: Compare = Compare.Exact,
     ) -> None: ...
     @property
     def kind(self) -> Kind | None:
         """指定された種類 (None はその錬金で出る種類のどれか)"""
+    @property
+    def compare(self) -> Compare:
+        """見つけたお守りとの比べ方"""
     @property
     def melding(self) -> Melding: ...
     @property
@@ -305,10 +315,10 @@ def search(
     query: Query,
     start: int,
     end: int,
-    compare: Compare = Compare.Exact,
     nthreads: int = 1,
 ) -> list[Found]:
-    """位置 ``[start, end)`` の範囲で、query のお守りが作られる位置を探す
+    """位置 ``[start, end)`` の範囲で、query のお守りが
+    (:attr:`Query.compare` の比べ方で) 作られる位置を探す
     (本家の ``search`` / ``show_fast``)。
     見つけた位置の小さい順
     (同じ位置なら風化・古びた・光る・なぞの順) に返す。
@@ -317,7 +327,6 @@ def search(
     :param query: 探すお守り
     :param start: 範囲の始まり
     :param end: 範囲の終わり (含まない)
-    :param compare: 比べ方 (既定は :attr:`Compare.Exact`)
     :param nthreads: 使うスレッドの数。
         範囲を分けて並列に探す (結果は同じ)
     :raises ValueError: nthreads が 0
@@ -327,10 +336,10 @@ def search_many(
     queries: Sequence[Query],
     start: int,
     end: int,
-    compare: Compare = Compare.Exact,
     nthreads: int = 1,
 ) -> list[Found]:
-    """位置 ``[start, end)`` の範囲で、queries のどれかが作られる位置を探す
+    """位置 ``[start, end)`` の範囲で、queries のどれかが
+    (それぞれの :attr:`Query.compare` の比べ方で) 作られる位置を探す
     (本家の ``show_fast_multi``)。
     見つけた位置の小さい順、同じ位置なら queries の順、
     さらに同じなら風化・古びた・光る・なぞの順に返す
@@ -340,10 +349,9 @@ def search_many(
     :func:`search` 1 回と同じくらいの速さで済む。
 
     :param queries: 探すお守りの一覧
-        (種類や錬金のやり方が混ざっていてもよい)
+        (種類や錬金のやり方、比べ方が混ざっていてもよい)
     :param start: 範囲の始まり
     :param end: 範囲の終わり (含まない)
-    :param compare: 比べ方 (既定は :attr:`Compare.Exact`)
     :param nthreads: 使うスレッドの数
     :raises ValueError: nthreads が 0
     """
@@ -354,6 +362,8 @@ class MeldingTarget:
 
     鑑定画面で読んだ護石は種類が分からないので、
     query は種類を省略するのが普通。
+    読んだ中身と同じかで照合するので、query の比べ方は
+    :attr:`Compare.Exact` にする (:func:`search_meldings` で確かめる)。
 
     :param query: 探すお守り
     :param index: 1 回の錬金の中で何個目か (1 から)。None は指定なし。
@@ -404,7 +414,8 @@ def search_meldings(
     :param end: 範囲の終わり (含まない)
     :param nthreads: 使うスレッドの数
     :raises ValueError: 錬金のやり方かランクが揃っていない、
-        何個目がその錬金の最大の数を超えた、nthreads が 0
+        何個目がその錬金の最大の数を超えた、
+        比べ方が :attr:`Compare.Exact` でない Query がある、nthreads が 0
     """
 
 @final

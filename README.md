@@ -11,9 +11,10 @@ import mhxx_rand as mr
 
 charm = mr.Charm(skill1=mr.Skill("連撃"), pts1=4,
                  skill2=mr.Skill("痛撃"), pts2=5, slots=3)
-q = mr.Query(mr.Melding.Juju, charm, kind=mr.Kind.Weathered)
+q = mr.Query(mr.Melding.Juju, charm, kind=mr.Kind.Weathered,
+             compare=mr.Compare.AtLeast)
 
-for f in mr.search(q, 0, 10**8, mr.Compare.AtLeast, nthreads=4):
+for f in mr.search(q, 0, 10**8, nthreads=4):
     print("護石:", f.charm)
     for a in f.aimpoints():
         # 錬金のフレーム、何個目か、時間
@@ -26,8 +27,9 @@ charms = [
     mr.Charm(skill1=mr.Skill("連撃"), pts1=5, slots=3),
     mr.Charm(skill1=mr.Skill("特会"), pts1=6, slots=3),
 ]
-qs = [mr.Query(mr.Melding.Juju, c) for c in charms]
-for f in mr.search_many(qs, 0, 10**6, mr.Compare.AtLeast, nthreads=4):
+qs = [mr.Query(mr.Melding.Juju, c, compare=mr.Compare.AtLeast)
+      for c in charms]
+for f in mr.search_many(qs, 0, 10**6, nthreads=4):
     print(f.index, f.charm)   # 2 Charm(skill1=Skill("特会"), pts1=6, ...
 
 # その範囲で錬金したら何が出るか

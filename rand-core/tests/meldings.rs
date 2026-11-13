@@ -5,8 +5,8 @@
 //! お守りは [第 1 スキル, ポイント, 第 2 スキル (なければ -1), ポイント, スロット]
 
 use mhxx_rand::{
-    Charm, FrameMatch, Kind, Melding, MeldingError, MeldingTarget, Outcome, Query, Rank, Skill,
-    outcomes, search_meldings,
+    Charm, Compare, FrameMatch, Kind, Melding, MeldingError, MeldingTarget, Outcome, Query, Rank,
+    Skill, outcomes, search_meldings,
 };
 use serde_json::Value;
 
@@ -32,7 +32,7 @@ fn charm(v: &Value) -> Charm {
 /// 種類を決めない、マカフシギ錬金・ランク 4 のお守り 1 個
 fn target(c: &Charm, index: Option<u8>) -> MeldingTarget {
     MeldingTarget {
-        query: Query::new(Melding::Juju, Rank::MAX, None, c).unwrap(),
+        query: Query::new(Melding::Juju, Rank::MAX, None, c, Compare::Exact).unwrap(),
         index,
     }
 }
@@ -75,7 +75,7 @@ fn single_charm_matches_python() {
             })
             .collect();
         // マカフシギ錬金で出ないお守りは、Query を作る時点で弾く (frames.py は空を返す)
-        let Ok(q) = Query::new(Melding::Juju, Rank::MAX, None, &c) else {
+        let Ok(q) = Query::new(Melding::Juju, Rank::MAX, None, &c, Compare::Exact) else {
             assert!(want.is_empty(), "{case}");
             continue;
         };
@@ -180,7 +180,7 @@ fn many_charms_match_brute_force() {
             let pick = |f: usize, j: usize, index: bool, kind: bool| {
                 let (k, c) = all[f].charms[j];
                 MeldingTarget {
-                    query: Query::new(m, Rank::MAX, kind.then_some(k), &c).unwrap(),
+                    query: Query::new(m, Rank::MAX, kind.then_some(k), &c, Compare::Exact).unwrap(),
                     index: index.then_some(j as u8 + 1),
                 }
             };
@@ -285,7 +285,7 @@ fn invalid_targets_are_errors() {
         slots: 0,
     };
     let h = |index| MeldingTarget {
-        query: Query::new(Melding::Halcyon, Rank::MAX, None, &shining).unwrap(),
+        query: Query::new(Melding::Halcyon, Rank::MAX, None, &shining, Compare::Exact).unwrap(),
         index,
     };
     assert!(search_meldings(&[h(Some(6))], 0..1000).is_ok());
@@ -300,18 +300,20 @@ fn invalid_targets_are_errors() {
         skill2: None,
         slots: 0,
     };
-    let juju = MeldingTarget {
-        query: Query::new(Melding::Juju, Rank::MAX, Some(Kind::Worn), &worn).unwrap(),
+    let target = |m, rank, kind, compare| MeldingTarget {
+        query: Query::new(m, rank, kind, &worn, compare).unwrap(),
         index: None,
     };
-    let halcyon = MeldingTarget {
-        query: Query::new(Melding::Halcyon, Rank::MAX, Some(Kind::Worn), &worn).unwrap(),
-        index: None,
-    };
-    let rank2 = MeldingTarget {
-        query: Query::new(Melding::Juju, Rank::new(2).unwrap(), None, &worn).unwrap(),
-        index: None,
-    };
+    let w = Some(Kind::Worn);
+    let juju = target(Melding::Juju, Rank::MAX, w, Compare::Exact);
+    let halcyon = target(Melding::Halcyon, Rank::MAX, w, Compare::Exact);
+    let rank2 = target(Melding::Juju, Rank::new(2).unwrap(), None, Compare::Exact);
+    // 鑑定画面で読んだ中身と同じかで照合するので、AtLeast の Query は探せない (何番目かを返す)
+    let at_least = target(Melding::Juju, Rank::MAX, w, Compare::AtLeast);
+    assert_eq!(
+        search_meldings(&[juju.clone(), at_least], 0..1000),
+        Err(MeldingError::NotExact { target: 1 })
+    );
     assert_eq!(
         search_meldings(&[juju.clone(), halcyon], 0..1000),
         Err(MeldingError::Mixed)

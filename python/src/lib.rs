@@ -345,6 +345,15 @@ impl From<Compare> for rand::Compare {
     }
 }
 
+impl From<rand::Compare> for Compare {
+    fn from(c: rand::Compare) -> Self {
+        match c {
+            rand::Compare::Exact => Self::Exact,
+            rand::Compare::AtLeast => Self::AtLeast,
+        }
+    }
+}
+
 /// お守りに付きうるスキル。Skill("連撃") のように、本家の日本語の略称か正式名称 (鑑定画面の表記) で作る
 #[pyclass(eq, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -486,7 +495,7 @@ impl Charm {
     }
 }
 
-/// 探すお守り。作るときに表を引き、その錬金・種類で出ないお守りなら ValueError。
+/// 探すお守り。作るときに表を引き、その錬金・種類で (compare の比べ方で) 出ないお守りなら ValueError。
 /// kind を省略すると、その錬金で出る種類のどれか
 #[pyclass(frozen)]
 struct Query(rand::Query);
@@ -494,16 +503,29 @@ struct Query(rand::Query);
 #[pymethods]
 impl Query {
     #[new]
-    #[pyo3(signature = (melding, charm, kind = None, rank = 4))]
-    fn new(melding: Melding, charm: Charm, kind: Option<Kind>, rank: u8) -> PyResult<Self> {
+    #[pyo3(signature = (melding, charm, kind = None, rank = 4, compare = Compare::Exact))]
+    fn new(
+        melding: Melding,
+        charm: Charm,
+        kind: Option<Kind>,
+        rank: u8,
+        compare: Compare,
+    ) -> PyResult<Self> {
         rand::Query::new(
             melding.into(),
             self::rank(rank)?,
             kind.map(Into::into),
             &charm.0,
+            compare.into(),
         )
         .map(Self)
         .map_err(|e| PyValueError::new_err(format!("{e:?}")))
+    }
+
+    /// 見つけたお守りとの比べ方
+    #[getter]
+    fn compare(&self) -> Compare {
+        self.0.compare().into()
     }
 
     /// 指定された種類 (None はその錬金で出る種類のどれか)
@@ -533,49 +555,44 @@ impl Query {
             .kind()
             .map_or("None".to_string(), |k| format!("Kind.{k:?}"));
         format!(
-            "Query(melding=Melding.{:?}, charm={}, kind={kind}, rank={})",
+            "Query(melding=Melding.{:?}, charm={}, kind={kind}, rank={}, compare=Compare.{:?})",
             self.0.melding(),
             Charm(*self.0.charm()).__repr__(),
-            self.0.rank().get()
+            self.0.rank().get(),
+            self.0.compare()
         )
     }
 }
 
-/// [start, end) の範囲で、query のお守りが作られる位置を探す。nthreads は使うスレッドの数
+/// [start, end) の範囲で、query のお守りが (query の比べ方で) 作られる位置を探す。nthreads は使うスレッドの数
 #[pyfunction]
-#[pyo3(signature = (query, start, end, compare = Compare::Exact, nthreads = 1))]
+#[pyo3(signature = (query, start, end, nthreads = 1))]
 fn search(
     py: Python<'_>,
     query: &Query,
     start: u64,
     end: u64,
-    compare: Compare,
     nthreads: usize,
 ) -> PyResult<Vec<Found>> {
     let q = &query.0;
-    let compare = compare.into();
-    let parts = parallel(py, start..end, nthreads, |frames| {
-        rand::search(q, compare, frames)
-    })?;
+    let parts = parallel(py, start..end, nthreads, |frames| rand::search(q, frames))?;
     Ok(parts.into_iter().flatten().map(Found).collect())
 }
 
-/// [start, end) の範囲で、queries のどれかが作られる位置を探す (Found の index が queries の何番目か)。
-/// 乱数の列は、お守りの種類ごとに 1 回だけ流す
+/// [start, end) の範囲で、queries のどれかが (それぞれの比べ方で) 作られる位置を探す
+/// (Found の index が queries の何番目か)。乱数の列は、お守りの種類ごとに 1 回だけ流す
 #[pyfunction]
-#[pyo3(signature = (queries, start, end, compare = Compare::Exact, nthreads = 1))]
+#[pyo3(signature = (queries, start, end, nthreads = 1))]
 fn search_many(
     py: Python<'_>,
     queries: Vec<PyRef<'_, Query>>,
     start: u64,
     end: u64,
-    compare: Compare,
     nthreads: usize,
 ) -> PyResult<Vec<Found>> {
     let qs: Vec<rand::Query> = queries.iter().map(|q| q.0.clone()).collect();
-    let compare = compare.into();
     let parts = parallel(py, start..end, nthreads, |frames| {
-        rand::search_many(&qs, compare, frames)
+        rand::search_many(&qs, frames)
     })?;
     Ok(parts.into_iter().flatten().map(Found).collect())
 }
@@ -631,7 +648,8 @@ impl FrameMatch {
 }
 
 /// [start, end) の範囲の錬金のフレームのうち、targets が全部 (それぞれ別の位置に) 出るもの。
-/// targets の錬金のやり方・ランクが揃っていないか、何個目がその錬金の最大の数を超えたら ValueError
+/// targets の錬金のやり方・ランクが揃っていないか、何個目がその錬金の最大の数を超えたか、
+/// 比べ方が Exact でない Query があれば ValueError
 #[pyfunction]
 #[pyo3(signature = (targets, start, end, nthreads = 1))]
 fn search_meldings(

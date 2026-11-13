@@ -95,9 +95,10 @@ fn aimpoints_match() {
             rank(&case["rank"]),
             Some(k),
             &charm_at(k, p).shown(),
+            Compare::Exact,
         )
         .unwrap();
-        let found = search(&q, Compare::Exact, p..p + 1);
+        let found = search(&q, p..p + 1);
         assert_eq!(found.len(), 1, "{case}");
         let got: Vec<u64> = found[0].aimpoints().iter().map(|a| a.start).collect();
         let want: Vec<u64> = case["starts"]
@@ -226,20 +227,17 @@ fn check_searches(key: &str) {
         } else {
             Melding::Halcyon
         };
-        let q = Query::new(m, Rank::MAX, Some(k), &charm(&case["charm"])).unwrap();
         let compare = if case["compare"] == "exact" {
             Compare::Exact
         } else {
             Compare::AtLeast
         };
+        let q = Query::new(m, Rank::MAX, Some(k), &charm(&case["charm"]), compare).unwrap();
         let (start, end) = (
             case["start"].as_u64().unwrap(),
             case["end"].as_u64().unwrap(),
         );
-        let got: Vec<u64> = search(&q, compare, start..end)
-            .iter()
-            .map(|f| f.position)
-            .collect();
+        let got: Vec<u64> = search(&q, start..end).iter().map(|f| f.position).collect();
         let want: Vec<u64> = case["positions"]
             .as_array()
             .unwrap()
