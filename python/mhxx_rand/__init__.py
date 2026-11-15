@@ -16,6 +16,7 @@ from ._mhxx_rand import (
     MeldingTarget,
     Outcome,
     Query,
+    RewardCharm,
     Skill,
     SkillInfo,
     outcomes,
@@ -23,6 +24,7 @@ from ._mhxx_rand import (
     search_combo,
     search_many,
     search_meldings,
+    search_rewards,
     skill_info,
 )
 
@@ -42,6 +44,7 @@ __all__ = [
     "MeldingTarget",
     "Outcome",
     "Query",
+    "RewardCharm",
     "Skill",
     "SkillInfo",
     "outcomes",
@@ -49,5 +52,6 @@ __all__ = [
     "search_combo",
     "search_many",
     "search_meldings",
+    "search_rewards",
     "skill_info",
 ]

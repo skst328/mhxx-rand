@@ -4,8 +4,8 @@
 use std::sync::OnceLock;
 
 use mhxx_rand::{
-    Charm, ComboQuery, Compare, Diagnose, Kind, Melding, Query, Rank, Skill, charm_at, outcomes,
-    search, search_combo,
+    Charm, ComboQuery, Compare, Diagnose, Kind, Melding, Query, Rank, RewardCharm, Skill, charm_at,
+    outcomes, search, search_combo, search_rewards,
 };
 use serde_json::Value;
 
@@ -81,6 +81,48 @@ fn meldings_match() {
             .map(|c| (kind(&c["kind"]), charm(&c["charm"])))
             .collect();
         assert_eq!(got.charms, want, "{case}");
+    }
+}
+
+/// クエスト報酬で鑑定したフレームごとに、出るお守りとレア度が本家と同じ (種類が混ざった 4 個。マイナスと
+/// 0 ポイントの第 2 スキルを含む): 4 個とも渡すと、そのフレームが見つかる。1 個目だけでも見つかる。
+/// レア度は元のお守りの種類と合い、同じ種類の別のレア度にすると見つからない
+#[test]
+fn rewards_match() {
+    for case in list("rewards") {
+        let frame = case["frame"].as_u64().unwrap();
+        let charms: Vec<RewardCharm> = case["charms"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| {
+                let rarity = c["rarity"].as_u64().unwrap() as u8;
+                assert_eq!(Kind::from_rarity(rarity), Some(kind(&c["kind"])), "{case}");
+                RewardCharm {
+                    rarity,
+                    charm: charm(&c["charm"]),
+                }
+            })
+            .collect();
+        let at = frame..frame + 1;
+        assert_eq!(
+            search_rewards(&charms, at.clone()),
+            Ok(vec![frame]),
+            "{case}"
+        );
+        assert_eq!(
+            search_rewards(&charms[..1], at.clone()),
+            Ok(vec![frame]),
+            "{case}"
+        );
+        let mut wrong = charms.clone();
+        let last = wrong.last_mut().unwrap();
+        // 同じ種類の中の別のレア度 (風化 8〜10 なら 8 と 9 を入れ替えるなど)
+        last.rarity = match last.rarity {
+            1 | 3 | 5 | 8 => last.rarity + 1,
+            r => r - 1,
+        };
+        assert_eq!(search_rewards(&wrong, at), Ok(vec![]), "{case}");
     }
 }
 

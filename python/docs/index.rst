@@ -71,6 +71,20 @@ Query の kind は省略する。
        print(m.frame, m.indexes, m.game_time())
        # 4723 [[1]] 0d 0h 2m 37s 13f ...
 
+クエスト報酬で鑑定した護石から、「鑑定する」を押したフレームを探すのは
+:func:`mhxx_rand.search_rewards`。鑑定した護石を 1 個目から順に渡す。
+レア度は護石の名前から分かり (兵士 1〜天 10)、元のお守りの種類もそれで決まる。
+
+.. code-block:: python
+
+   charms = [
+       mr.RewardCharm(mr.Charm(mr.Skill("根性"), 4, mr.Skill("属耐"), -3, 1),
+                      rarity=9),   # 伝説の護石
+       mr.RewardCharm(mr.Charm(mr.Skill("体力"), 3, slots=1),
+                      rarity=1),   # 兵士の護石
+   ]
+   print(mr.search_rewards(charms, 0, 10**6))   # [4]
+
 錬金で出うるスキルと、第 1・第 2 スキルとして出るときのポイントの範囲は
 :func:`mhxx_rand.skill_info` で引く (画面の選択肢を作るのに使う)。
 

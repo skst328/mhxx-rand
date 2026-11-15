@@ -1,6 +1,7 @@
 # mhxx-rand
 
-MHXX の乱数と、マカ錬金のお守りの生成・検索のライブラリ。
+MHXX の乱数と、マカ錬金のお守りの生成・検索のライブラリ
+(クエスト報酬で鑑定した護石から、鑑定したフレームを探すこともできる)。
 [apmnnn/mhxx-rng](https://github.com/apmnnn/mhxx-rng) の非公式な Rust 移植で、
 Python からも使える。
 
@@ -42,6 +43,16 @@ for o in mr.outcomes(mr.Melding.Juju, 4713, 4734):
 targets = [mr.MeldingTarget(mr.Query(mr.Melding.Juju, charm), 1)]
 for m in mr.search_meldings(targets, 0, 10**7):
     print(m.frame, m.game_time())   # 4723 0d 0h 2m 37s 13f ...
+
+# クエスト報酬で鑑定した護石 (1 個目から順に。レア度は護石の名前から)
+# から、「鑑定する」を押したフレームを探す
+charms = [
+    mr.RewardCharm(mr.Charm(mr.Skill("根性"), 4, mr.Skill("属耐"), -3, 1),
+                   rarity=9),   # 伝説の護石
+    mr.RewardCharm(mr.Charm(mr.Skill("体力"), 3, slots=1),
+                   rarity=1),   # 兵士の護石
+]
+print(mr.search_rewards(charms, 0, 10**6))   # [4]
 
 # 錬金で出うるスキルと、ポイントの範囲 (画面の選択肢に使う)
 for i in mr.skill_info(mr.Melding.Juju):

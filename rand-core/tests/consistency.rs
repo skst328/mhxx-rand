@@ -4,8 +4,9 @@ use std::collections::BTreeSet;
 
 use mhxx_rand::rng::{ascend, jump};
 use mhxx_rand::{
-    Charm, Compare, Kind, Melding, Outcome, Query, QueryError, Rank, Reason, Skill, make, outcomes,
-    search, search_many, skill_info,
+    Charm, Compare, Kind, Melding, Outcome, Query, QueryError, Rank, Reason, RewardCharm,
+    RewardError, Skill, make, make_reward, outcomes, search, search_many, search_rewards,
+    skill_info,
 };
 
 fn charm(s1: &str, p1: i8, skill2: Option<(&str, i8)>, slots: u8) -> Charm {
@@ -454,4 +455,75 @@ fn at_least_keeps_kinds_below_minimum() {
         new(w, charm("斬味", 8, None, 0), Compare::AtLeast).unwrap_err(),
         QueryError::Impossible(vec![(Kind::Weathered, Reason::Pts1)])
     );
+}
+
+/// 位置 p から鑑定したときに、kinds の順に出るお守り (search_rewards を使わずに、素直に作ったもの)
+fn reward_chain(p: u64, kinds: &[Kind]) -> Vec<RewardCharm> {
+    let mut at = p;
+    kinds
+        .iter()
+        .map(|&k| {
+            let mut s = jump(at);
+            let r: [u32; 7] = std::array::from_fn(|_| {
+                let w = s[3];
+                s = ascend(s);
+                w
+            });
+            at += if r[2] % 100 >= k.table().no_skill2 {
+                7
+            } else {
+                4
+            };
+            let made = make_reward(k, &r);
+            RewardCharm {
+                rarity: made.rarity,
+                charm: made.shown(),
+            }
+        })
+        .collect()
+}
+
+/// search_rewards は、フレームごとに 1 個目から順にお守りを作って比べた総当たりと同じ (1 個だけ・種類の混ざった
+/// 3 個)。範囲を区切っても同じ
+#[test]
+fn search_rewards_matches_brute_force() {
+    use Kind::{Mystery, Shining, Weathered, Worn};
+    let frames = 0..200_000;
+    for (p, kinds) in [
+        (1_234, vec![Worn]),
+        (98_765, vec![Weathered, Mystery, Worn]),
+        (150_001, vec![Shining, Weathered, Weathered]),
+    ] {
+        let charms = reward_chain(p, &kinds);
+        let got = search_rewards(&charms, frames.clone()).unwrap();
+        let want: Vec<u64> = frames
+            .clone()
+            .filter(|&f| reward_chain(f, &kinds) == charms)
+            .collect();
+        assert!(want.contains(&p), "{charms:?}");
+        assert_eq!(got, want, "{charms:?}");
+        let mut parts = search_rewards(&charms, 0..p).unwrap();
+        parts.extend(search_rewards(&charms, p..frames.end).unwrap());
+        assert_eq!(parts, want, "{charms:?} 区切り {p}");
+    }
+}
+
+/// search_rewards: レア度が 1〜10 でなければ何個目かを付けてエラー。空なら空
+#[test]
+fn search_rewards_errors() {
+    let c = |rarity| RewardCharm {
+        rarity,
+        charm: charm("斬味", 5, None, 1),
+    };
+    for bad in [0, 11] {
+        assert_eq!(
+            search_rewards(&[c(9), c(bad)], 0..1000),
+            Err(RewardError::Rarity {
+                index: 1,
+                rarity: bad
+            })
+        );
+    }
+    assert_eq!(search_rewards(&[], 0..1000), Ok(Vec::new()));
+    assert_eq!(search_rewards(&[c(9)], 10..10), Ok(Vec::new()));
 }

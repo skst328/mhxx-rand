@@ -113,6 +113,20 @@ def test_search_meldings():
         mr.search_meldings([targets[0], at_least], 0, 10)
 
 
+def test_search_rewards():
+    # フレーム 4 で鑑定すると、伝説の護石 (風化) の「根性4 属耐-3 S1」、兵士の護石 (なぞ) の「体力3 S1」の順に出る
+    legend = mr.RewardCharm(mr.Charm(mr.Skill("根性"), 4, mr.Skill("属耐"), -3, 1), 9)
+    pawn = mr.RewardCharm(mr.Charm(mr.Skill("体力"), 3, slots=1), 1)
+    found = mr.search_rewards([legend, pawn], 0, 1_000_000)
+    assert 4 in found
+    assert mr.search_rewards([legend, pawn], 0, 1_000_000, nthreads=3) == found
+    # 1 個目だけでも見つかる。2 個目まで渡すと、1 個目だけのときの一部に絞れる
+    assert set(found) <= set(mr.search_rewards([legend], 0, 1_000_000))
+    assert repr(legend).startswith('RewardCharm(charm=Charm(skill1=Skill("根性"), pts1=4, ')
+    with pytest.raises(ValueError, match="レア度"):
+        mr.search_rewards([legend, mr.RewardCharm(pawn.charm, 11)], 0, 10)
+
+
 def test_game_time():
     t = mr.GameTime(2_592_000 * 3 + 108_000 * 5 + 1800 * 7 + 30 * 9 + 11)
     assert (t.days, t.hours, t.minutes, t.seconds, t.frames) == (3, 5, 7, 9, 11)

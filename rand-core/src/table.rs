@@ -11,7 +11,6 @@ pub struct Table {
     pub skill1: &'static [Skill],
     pub pts1: &'static [(u8, u8)],
     /// 第 2 スキルと、ポイントの (マイナスのときの幅, 最大)。マイナスはクエスト報酬だけで出る
-    /// (mhxx-rand はマカ錬金だけなので、マイナスの幅は使わない。本家の表のまま残している)
     pub skill2: &'static [Skill],
     pub pts2: &'static [(u8, u8)],
     /// 充足値 (1〜20) ごとの、スロットが 1・2・3 個になる乱数 (0〜99) の下限

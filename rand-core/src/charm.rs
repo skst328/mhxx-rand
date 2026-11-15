@@ -1,4 +1,4 @@
-//! お守りの種類と、乱数からお守りを作る (本家の getcharm の、マカ錬金の分)。
+//! お守りの種類と、乱数からお守りを作る (本家の getcharm。マカ錬金とクエスト報酬)。
 //!
 //! ライセンスは [`crate::rng`] の記載を参照 (apmnnn/mhxx-rng, MIT)。
 
@@ -20,6 +20,17 @@ pub enum Kind {
 }
 
 impl Kind {
+    /// 鑑定した護石のレア度 (1〜10) から、元のお守りの種類 (1〜2 なぞ、3〜4 光る、5〜7 古びた、8〜10 風化)
+    pub const fn from_rarity(rarity: u8) -> Option<Self> {
+        match rarity {
+            1..=2 => Some(Self::Mystery),
+            3..=4 => Some(Self::Shining),
+            5..=7 => Some(Self::Worn),
+            8..=10 => Some(Self::Weathered),
+            _ => None,
+        }
+    }
+
     pub const fn table(self) -> &'static Table {
         match self {
             Self::Weathered => &WEATHERED,
@@ -46,7 +57,8 @@ pub struct Charm {
 pub struct Generated {
     pub skill1: Skill,
     pub pts1: i8,
-    /// 第 2 スキルとポイント。第 1 スキルと同じスキルのときも入る (画面には出ない)
+    /// 第 2 スキルとポイント。第 1 スキルと同じスキルのときや、ポイントが 0 のとき (クエスト報酬のマイナスの判定で
+    /// 出る) も入る (どちらも画面には出ない)
     pub skill2: Option<(Skill, i8)>,
     pub slots: u8,
     /// 充足値 (1〜20)
@@ -61,7 +73,7 @@ impl Generated {
         Charm {
             skill1: self.skill1,
             pts1: self.pts1,
-            skill2: self.skill2.filter(|&(s, _)| s != self.skill1),
+            skill2: self.skill2.filter(|&(s, p)| s != self.skill1 && p != 0),
             slots: self.slots,
         }
     }
@@ -69,22 +81,40 @@ impl Generated {
 
 /// 7 個の乱数 r (r[0] が古い) から、kind の種類のお守りを作る (マカ錬金。r[6] は使わない)
 pub fn make(kind: Kind, r: &[u32; 7]) -> Generated {
+    build(kind, r, false)
+}
+
+/// 7 個の乱数 r (r[0] が古い) から、kind の種類のお守りを作る (クエスト報酬。本家の getcharm の '炭鉱')。
+/// マカ錬金と違い、第 2 スキルが付くと r[4] の偶奇でマイナスかを決め、ポイントは r[5]、スロットは r[6] で決める
+pub fn make_reward(kind: Kind, r: &[u32; 7]) -> Generated {
+    build(kind, r, true)
+}
+
+/// お守りを作る。reward ならクエスト報酬の作り方 ([`make_reward`])
+fn build(kind: Kind, r: &[u32; 7], reward: bool) -> Generated {
     let t = kind.table();
     let id1 = r[0] as usize % t.skill1.len();
     let id2 = r[3] as usize % t.skill2.len();
     let (lo1, s1) = t.pts1[id1];
-    let s2 = t.pts2[id2].1;
+    let (minus2, s2) = t.pts2[id2];
     let pts1 = r[1] % u32::from(s1 - lo1 + 1) + u32::from(lo1);
     // (第 2 スキル, 充足値に数える第 2 スキルのポイント, スロットを決める乱数)
     let (skill2, counted2, q5) = if r[2] % 100 >= t.no_skill2 {
-        let pts2 = r[4] % u32::from(s2) + 1;
-        // 第 1 スキルと同じスキルなら、充足値には数えない
-        let counted = if t.skill1[id1] == t.skill2[id2] {
+        let (pts2, q5) = if !reward {
+            ((r[4] % u32::from(s2)) as i8 + 1, r[5])
+        } else if r[4].is_multiple_of(2) {
+            // クエスト報酬のマイナス (-幅〜0。0 は画面に出ない)
+            ((r[5] % (u32::from(minus2) + 1)) as i8 - minus2 as i8, r[6])
+        } else {
+            ((r[5] % u32::from(s2)) as i8 + 1, r[6])
+        };
+        // 第 1 スキルと同じスキルか、マイナスなら、充足値には数えない
+        let counted = if t.skill1[id1] == t.skill2[id2] || pts2 < 0 {
             0
         } else {
-            pts2
+            pts2 as u32
         };
-        (Some((t.skill2[id2], pts2 as i8)), counted, r[5])
+        (Some((t.skill2[id2], pts2)), counted, q5)
     } else {
         (None, 0, r[3])
     };

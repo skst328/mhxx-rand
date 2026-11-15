@@ -419,6 +419,45 @@ def search_meldings(
     """
 
 @final
+class RewardCharm:
+    """:func:`search_rewards` に渡す、クエスト報酬で鑑定した護石 1 個。
+
+    レア度は護石の名前から分かる (兵士 1・闘士 2・騎士 3・城塞 4・女王 5・
+    王 6・龍 7・英雄 8・伝説 9・天 10)。元のお守りの種類もレア度で決まる。
+
+    :param charm: 鑑定画面に出る中身。第 2 スキルが 0 ポイントだと
+        画面に出ないので、第 2 スキルなしで書く
+    :param rarity: レア度 (1〜10)
+    """
+
+    def __init__(self, charm: Charm, rarity: int) -> None: ...
+    @property
+    def charm(self) -> Charm: ...
+    @property
+    def rarity(self) -> int: ...
+
+def search_rewards(
+    charms: Sequence[RewardCharm],
+    start: int,
+    end: int,
+    nthreads: int = 1,
+) -> list[int]:
+    """フレーム ``[start, end)`` の範囲で、クエスト報酬の「鑑定する」を押すと
+    charms が 1 個目から順に (レア度も合わせて) 出るフレームを探す
+    (フレームの小さい順)。鑑定した護石から、鑑定したフレームを逆算するのに使う。
+
+    報酬のお守りは、押したフレームの位置から 1 個目が作られ、
+    2 個目からはその続きの乱数で作られる。
+
+    :param charms: 鑑定した護石を 1 個目から順に
+        (途中から後ろは渡さなくてよい)
+    :param start: 範囲の始まり
+    :param end: 範囲の終わり (含まない)
+    :param nthreads: 使うスレッドの数
+    :raises ValueError: レア度が 1〜10 でない、nthreads が 0
+    """
+
+@final
 class SkillInfo:
     """その錬金で出うるスキルと、ポイントの範囲。
     画面でスキルとポイントの選択肢を作るのに使う。"""

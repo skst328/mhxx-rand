@@ -275,7 +275,7 @@ fn seven(s: &[u32; 4]) -> [u32; 7] {
 /// frames の位置 p のうち、quick と full を両方通るものを小さい順に返す。どちらにも位置 p+3 の状態を渡す
 /// (s[0..4] が位置 p〜p+3 の乱数。残りが要れば [`seven`] で作る)。quick は毎回呼ぶ手早い見比べで、
 /// full は quick を通ったときだけ呼ぶ重い処理 (ループの中に展開させない)
-fn scan(
+pub(crate) fn scan(
     frames: Range<u64>,
     quick: impl Fn(&[u32; 4]) -> bool,
     full: impl Fn(&[u32; 4]) -> bool,

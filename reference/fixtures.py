@@ -27,8 +27,8 @@ m.showallrank = False
 
 
 def shown(c):
-    """getcharm の結果を、鑑定画面に出る中身に"""
-    has2 = c[2] != -1 and c[2] != c[0]
+    """getcharm の結果を、鑑定画面に出る中身に (第 2 スキルが 0 ポイントのときも出ない。クエスト報酬だけで起きる)"""
+    has2 = c[2] != -1 and c[2] != c[0] and c[3] != 0
     return [c[0], c[1], c[2] if has2 else -1, c[3] if has2 else 0, c[4]]
 
 
@@ -64,6 +64,30 @@ def meldings():
                     for _ in range(4 if m.r2 % 100 < m.th else 6):
                         m.roll()
                 out.append({'melding': melding, 'rank': rank, 'frame': frame, 'charms': made})
+    return out
+
+
+def rewards():
+    """クエスト報酬で鑑定したフレームごとに、出るお守りとレア度 (本家の sequence_charm と同じ手順)。
+    本家は同時に鑑定するお守りを同じ種類だけにしているが、1 個ごとに表を切り替えれば種類が混ざっても同じ手順で作れる
+    ので、種類は 1 個ごとに乱数で選ぶ。マイナスと 0 ポイント (画面に出ない) の第 2 スキルが含まれることも確かめる"""
+    out = []
+    for frame in positions():
+        made = []
+        m.jump(frame)
+        for _ in range(4):
+            k = random.randrange(4)
+            SETS[k]()
+            c = m.getcharm(1)
+            made.append({'kind': KINDS[k], 'charm': shown(c), 'rarity': c[7], 'pts2': c[3] if c[2] != -1 else None})
+            for _ in range(4 if m.r2 % 100 < m.th else 7):
+                m.roll()
+        out.append({'frame': frame, 'charms': made})
+    pts2 = [c['pts2'] for case in out for c in case['charms'] if c['pts2'] is not None]
+    assert any(p < 0 for p in pts2) and 0 in pts2, 'マイナスと 0 ポイントの第 2 スキルが含まれない'
+    for case in out:
+        for c in case['charms']:
+            del c['pts2']
     return out
 
 
@@ -188,7 +212,9 @@ def combos():
 def main():
     data = {'charms': charms(), 'meldings': meldings(), 'aimpoints': aimpoints(), 'searches': searches(),
             'every_skill_searches': every_skill_searches(), 'tables': tables(), 'skill_names': skill_names(),
-            'combos': combos()}
+            'combos': combos(),
+            # 乱数 (random) をほかより後に使うので最後に (先に呼ぶと、ほかの正解の位置が変わる)
+            'rewards': rewards()}
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(data, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
     print(OUT, {k: len(v) for k, v in data.items()}, f'{OUT.stat().st_size // 1024} KB')

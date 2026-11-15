@@ -676,6 +676,61 @@ fn search_meldings(
     Ok(out)
 }
 
+/// クエスト報酬で鑑定した護石 1 個: 中身とレア度 (1〜10。護石の名前から分かる)
+#[pyclass(frozen)]
+struct RewardCharm(rand::RewardCharm);
+
+#[pymethods]
+impl RewardCharm {
+    #[new]
+    fn new(charm: Charm, rarity: u8) -> Self {
+        Self(rand::RewardCharm {
+            rarity,
+            charm: charm.0,
+        })
+    }
+
+    #[getter]
+    fn charm(&self) -> Charm {
+        Charm(self.0.charm)
+    }
+
+    #[getter]
+    fn rarity(&self) -> u8 {
+        self.0.rarity
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "RewardCharm(charm={}, rarity={})",
+            Charm(self.0.charm).__repr__(),
+            self.0.rarity
+        )
+    }
+}
+
+/// [start, end) の範囲で「鑑定する」を押すと、charms が 1 個目から順に出るフレーム (小さい順)。
+/// レア度が 1〜10 でなければ ValueError
+#[pyfunction]
+#[pyo3(signature = (charms, start, end, nthreads = 1))]
+fn search_rewards(
+    py: Python<'_>,
+    charms: Vec<PyRef<'_, RewardCharm>>,
+    start: u64,
+    end: u64,
+    nthreads: usize,
+) -> PyResult<Vec<u64>> {
+    let cs: Vec<rand::RewardCharm> = charms.iter().map(|c| c.0).collect();
+    let parts = parallel(py, start..end, nthreads, |frames| {
+        rand::search_rewards(&cs, frames)
+    })?;
+    let mut out = Vec::new();
+    for part in parts {
+        out.extend(part.map_err(|e| PyValueError::new_err(e.to_string()))?);
+    }
+    Ok(out)
+}
+
 /// 探す調合の並び。cumulative は調合の前と、調合ごとの累計の個数 (分からないところは None)。
 /// 検索に使えない並びなら ValueError
 #[pyclass(frozen)]
@@ -858,6 +913,8 @@ fn _mhxx_rand(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<MeldingTarget>()?;
     m.add_class::<FrameMatch>()?;
     m.add_function(wrap_pyfunction!(search_meldings, m)?)?;
+    m.add_class::<RewardCharm>()?;
+    m.add_function(wrap_pyfunction!(search_rewards, m)?)?;
     m.add_class::<ComboQuery>()?;
     m.add_class::<Drift>()?;
     m.add_class::<Diagnosis>()?;
